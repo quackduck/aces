@@ -11,27 +11,26 @@ var (
 	encodeHaHa []rune
 	numOfBits  = 0
 	decode     bool
-	helpMsg    = `Encodin - Encode in a character set of your choice
+	helpMsg    = `Evc - Encode in a Variable Character set
 
 Usage:
-   encodin <charset>            - encode data into <charset>
-   encodin d/decode <charset>   - decode data from <charset>
-   encodin -h/--help            - print this help message
+   evc <charset>               - encode data into <charset>
+   evc -d/--decode <charset>   - decode data from <charset>
+   evc -h/--help               - print this help message
 
-Encodin reads from STDIN for your data and outputs the encoded (or decoded) data to
-STDOUT. Note that the character set length must be a power of 2. The name "Encodin"
-is a pun based on "encode in <charset>" and "encoding" :)
+Evc reads from STDIN for your data and outputs the result to STDOUT. The charset length must be a
+power of 2. While decoding, bytes not in the charset are ignored.
 
 Examples:
-   echo hello world | encodin +-./ | encodin decode +-./                # basic usage
-   echo stanciu     | encodin hazo | say                  # make funny sounds (macOS)
-   encodin .X       < /bin/echo                               # see binaries visually
-
-   echo Encodin™ | base64 | encodin d 
+   echo hello world | evc +-./ | evc --decode +-./                    # basic usage
+   echo matthew stanciu | evc HhAa | say                              # make funny sounds (macOS)
+   evc .X < /bin/echo                                                 # see binaries visually
+   echo Evc™ | base64 | evc -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # decode base64
+   echo 01001001 | evc -d 01 | evc 01234567                           # convert bases
+   echo Calculus | evc 01                                             # what's stuff in binary?
 
-   echo 01001001 | encodin d 01 | encodin 0123456789ABCDEF            # convert bases
-   echo -n C     | encodin 01                          # find what stuff is in binary`
+File issues, contribute or star at github.com/quackduck/codin`
 )
 
 func main() {
@@ -43,7 +42,7 @@ func main() {
 		fmt.Println(helpMsg)
 		return
 	}
-	decode = os.Args[1] == "decode" || os.Args[1] == "d"
+	decode = os.Args[1] == "--decode" || os.Args[1] == "-d"
 	if decode {
 		encodeHaHa = []rune(os.Args[2])
 	} else {
