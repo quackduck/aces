@@ -13,26 +13,26 @@ var (
 	encodeHaHa []rune
 	numOfBits  = 0
 	decode     bool
-	helpMsg    = `Ubase - Encode in a character set of your choice
+	helpMsg    = `Aces - Encode in any character set
 
 Usage:
-   ubase <charset>               - encode data into <charset>
-   ubase -d/--decode <charset>   - decode data from <charset>
-   ubase -h/--help               - print this help message
+   aces <charset>               - encode data from STDIN into <charset>
+   aces -d/--decode <charset>   - decode data from STDIN from <charset>
+   aces -h/--help               - print this help message
 
-Ubase reads from STDIN for your data and outputs the result to STDOUT. The charset length must be
-a power of 2. While decoding, bytes not in the charset are ignored. Ubase does not add any padding.
+Aces reads from STDIN for your data and outputs the result to STDOUT. The charset length must be
+a power of 2. While decoding, bytes not in the charset are ignored. Aces does not add any padding.
 
 Examples:
-   echo hello world | ubase +-./ | ubase --decode +-./                # basic usage
-   echo matthew stanciu | ubase HhAa | say                            # make funny sounds (macOS)
-   ubase .X < /bin/echo                                               # see binaries visually
-   echo 01001001 | ubase -d 01 | ubase 01234567                       # convert bases
-   echo Calculus | ubase 01                                           # what's stuff in binary?
-   echo Ubase™ | base64 | ubase -d
-   ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # decode base64
+   echo hello world | aces +-./ | aces --decode +-./                  # basic usage
+   echo matthew stanciu | aces HhAa | say                             # make funny sounds (macOS)
+   aces " X" < /bin/echo                                              # see binaries visually
+   echo 0100100100100001 | aces -d 01 | aces 01234567                 # convert bases
+   echo Calculus | aces 01                                            # what's stuff in binary?
+   echo Aces™ | base64 | aces -d
+   ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
 
-File issues, contribute or star at github.com/quackduck/ubase`
+File issues, contribute or star at github.com/quackduck/aces`
 )
 
 func main() {
