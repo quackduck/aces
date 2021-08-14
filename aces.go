@@ -24,7 +24,7 @@ Aces reads from STDIN for your data and outputs the result to STDOUT. The charse
 a power of 2. While decoding, bytes not in the charset are ignored. Aces does not add any padding.
 
 Examples:
-   echo hello world | aces +-./ | aces --decode +-./                  # basic usage
+   echo hello world | aces "<>(){}[]" | aces --decode "<>(){}[]"      # basic usage
    echo matthew stanciu | aces HhAa | say                             # make funny sounds (macOS)
    aces " X" < /bin/echo                                              # see binaries visually
    echo 0100100100100001 | aces -d 01 | aces 01234567                 # convert bases
