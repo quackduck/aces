@@ -1,3 +1,5 @@
+// can't believe this code actually works lol
+
 package main
 
 import (
@@ -11,26 +13,26 @@ var (
 	encodeHaHa []rune
 	numOfBits  = 0
 	decode     bool
-	helpMsg    = `Evc - Encode in a Variable Character set
+	helpMsg    = `Ubase - Encode in a character set of your choice
 
 Usage:
-   evc <charset>               - encode data into <charset>
-   evc -d/--decode <charset>   - decode data from <charset>
-   evc -h/--help               - print this help message
+   ubase <charset>               - encode data into <charset>
+   ubase -d/--decode <charset>   - decode data from <charset>
+   ubase -h/--help               - print this help message
 
-Evc reads from STDIN for your data and outputs the result to STDOUT. The charset length must be a
-power of 2. While decoding, bytes not in the charset are ignored.
+Ubase reads from STDIN for your data and outputs the result to STDOUT. The charset length must be
+a power of 2. While decoding, bytes not in the charset are ignored. Ubase does not add any padding.
 
 Examples:
-   echo hello world | evc +-./ | evc --decode +-./                    # basic usage
-   echo matthew stanciu | evc HhAa | say                              # make funny sounds (macOS)
-   evc .X < /bin/echo                                                 # see binaries visually
-   echo Evc™ | base64 | evc -d
+   echo hello world | ubase +-./ | ubase --decode +-./                # basic usage
+   echo matthew stanciu | ubase HhAa | say                            # make funny sounds (macOS)
+   ubase .X < /bin/echo                                               # see binaries visually
+   echo 01001001 | ubase -d 01 | ubase 01234567                       # convert bases
+   echo Calculus | ubase 01                                           # what's stuff in binary?
+   echo Ubase™ | base64 | ubase -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # decode base64
-   echo 01001001 | evc -d 01 | evc 01234567                           # convert bases
-   echo Calculus | evc 01                                             # what's stuff in binary?
 
-File issues, contribute or star at github.com/quackduck/codin`
+File issues, contribute or star at github.com/quackduck/ubase`
 )
 
 func main() {
