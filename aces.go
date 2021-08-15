@@ -52,7 +52,8 @@ func main() {
 	}
 	numOfBits = int(math.Log2(float64(len(encodeHaHa))))
 	if 1<<numOfBits != len(encodeHaHa) {
-		fmt.Fprintln(os.Stderr, "wrong charset length. have:", len(encodeHaHa), "want: a power of 2")
+		numOfBits = int(math.Round(math.Log2(float64(len(encodeHaHa)))))
+		fmt.Fprintln(os.Stderr, "error: charset length is not a power of two.\n   have:", len(encodeHaHa), "\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(encodeHaHa)-1<<numOfBits)), "away)")
 		os.Exit(1)
 	}
 
@@ -68,7 +69,6 @@ func main() {
 				}
 				panic(err)
 			}
-			//nextChar:
 			for _, c := range []rune(string(buf[:n])) {
 				for i, char := range encodeHaHa {
 					if c == char {
@@ -77,14 +77,8 @@ func main() {
 							panic(err)
 							return
 						}
-						//continue nextChar
 					}
-					//if c == '\n' {
-					//	//continue nextChar
-					//}
 				}
-				//fmt.Fprintln(os.Stderr, "error:", string(c), "is not in", string(encodeHaHa))
-				//os.Exit(1)
 			}
 		}
 		bw.flush()
@@ -143,20 +137,24 @@ func (bs *bitStreamer) init() error {
 }
 
 func (bs *bitStreamer) next() (b byte, e error) {
-	if bs.bitIdx/8 >= bs.bufN { // need to read more?
+	byteNum := bs.bitIdx / 8
+	bitNum := bs.bitIdx % 8
+	if byteNum >= bs.bufN { // need to read more?
 		n, err := bs.in.Read(bs.buf)
 		if err != nil {
 			return 0, err
 		}
-		bs.bitIdx = bs.bitIdx % 8
+		bs.bitIdx = bitNum
+		byteNum = bs.bitIdx / 8
+		bitNum = bs.bitIdx % 8
 		bs.bufN = n
 	}
 
 	var result byte
-	if bs.bitIdx%8+bs.chunkLen > 8 { // want to slice past current byte
-		currByte := bs.buf[bs.bitIdx/8]
+	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
+		currByte := bs.buf[byteNum]
 		didChange := false
-		if bs.bitIdx/8+1 >= bs.bufN { // unlikely
+		if byteNum+1 >= bs.bufN { // unlikely
 			didChange = true
 			eh := make([]byte, 1)
 			_, err := bs.in.Read(eh) // the actual data size doesn't change so we won't change n
@@ -164,22 +162,22 @@ func (bs *bitStreamer) next() (b byte, e error) {
 				eh[0] = 0 // let it read from null byte (size can be inferred automatically at decoder (result has to be multiples of 8 bits))
 				bs.bufN-- // next call should simpy exit so we make it as if there isn't any more data (which is actually already true)
 			}
-			if bs.bitIdx/8+1 >= len(bs.buf) {
+			if byteNum+1 >= len(bs.buf) {
 				bs.buf = append(bs.buf, eh[0])
 			} else {
-				bs.buf[bs.bitIdx/8+1] = eh[0]
+				bs.buf[byteNum+1] = eh[0]
 			}
 			bs.bufN++
 		}
-		nextByte := bs.buf[bs.bitIdx/8+1]
+		nextByte := bs.buf[byteNum+1]
 
-		firstByte := sliceByteLen(currByte, bs.bitIdx%8, 8-(bs.bitIdx%8))
-		result = (firstByte << byte(bs.chunkLen+(bs.bitIdx%8)-8)) + sliceByteLen(nextByte, 0, bs.chunkLen+(bs.bitIdx%8)-8)
+		firstByte := sliceByteLen(currByte, bitNum, 8-bitNum)
+		result = (firstByte << byte(bs.chunkLen+bitNum-8)) + sliceByteLen(nextByte, 0, bs.chunkLen+bitNum-8)
 		if didChange {
-			bs.bitIdx += bs.chunkLen - (8 - (bs.bitIdx % 8))
+			bs.bitIdx += bs.chunkLen - (8 - bitNum)
 		}
 	} else {
-		result = sliceByteLen(bs.buf[bs.bitIdx/8], bs.bitIdx%8, bs.chunkLen)
+		result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
 	}
 	bs.bitIdx += bs.chunkLen
 	return result, nil
