@@ -1,0 +1,51 @@
+before:
+  hooks:
+    - go mod download
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - freebsd
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - 386
+    ldflags:
+      - -s -w
+    ignore: # problems with build https://github.com/golang/go/issues/39033
+      - goos: darwin
+        goarch: arm64
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: 32-bit
+      amd64: x86_64
+    format_overrides:
+      - goos: windows
+        format: zip
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+brews:
+  -
+    # Repository to push the tap to.
+    tap:
+      owner: quackduck
+      name: homebrew-tap
+
+    homepage: 'https://github.com/quackduck/aces'
+
+    description: 'Encode in a character set of your choice'

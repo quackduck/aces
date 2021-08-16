@@ -46,6 +46,10 @@ func main() {
 	}
 	decode = os.Args[1] == "--decode" || os.Args[1] == "-d"
 	if decode {
+		if len(os.Args) == 2 {
+			fmt.Fprintln(os.Stderr, "error: need character set\n"+helpMsg)
+			os.Exit(1)
+		}
 		encodeHaHa = []rune(os.Args[2])
 	} else {
 		encodeHaHa = []rune(os.Args[1])
