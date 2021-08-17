@@ -18,21 +18,21 @@ This was the original use of Aces (it was called `ha`, increased data size by 4X
 
 If you're on macOS, you can even convert that output to speech:
 ```shell
-$ echo -n "Matthew Stanciu" | aces HhAa | say
+echo -n "Matthew Stanciu" | aces HhAa | say
 ```
 
 With Aces, you can see the actual 0s and 1s of files:
 ```shell
-$ aces 01 < $(which echo)
+aces 01 < $(which echo)
 ```
 You can also write hex/octal/binary/your own format by hand:
 ```shell
-$ echo C2A7 | aces -d 0123456789ABCDEF
-$ echo .+=. | aces -d ./+= # try this!
+echo C2A7 | aces -d 0123456789ABCDEF
+echo .+=. | aces -d ./+= # try this!
 ```
 Convert binary to hex:
 ```shell
-$ echo 01001010 | aces -d 01 | aces 0123456789ABCDEF 
+echo 01001010 | aces -d 01 | aces 0123456789ABCDEF
 ```
 
 _Also check out the examples!_
