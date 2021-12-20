@@ -3,7 +3,7 @@
 [comment]: <> (**A**ny **C**haracter **E**ncoding **S**et)
 Any Character Encoding Set
 
-Aces is a command line utility that lets you encode any file to a character set of your choice.
+Aces is a command line utility that lets you encode any data to a character set of your choice.
 
 For example, you could encode "Foo Bar" to a combination of these four characters: "HhAa", resulting in this ~~hilarious~~ sequence of laughs:
 ```text
@@ -19,6 +19,12 @@ This was the original use of Aces (it was called `ha`, increased data size by 4X
 If you're on macOS, you can even convert that output to speech:
 ```shell
 echo -n "Matthew Stanciu" | aces HhAa | say
+```
+
+Make your own wacky encoding:
+```shell
+$ echo HELLO WORLD | aces "DORK BUM"
+RRD RBO RKD M  DRBU MBRRRKD RDOR
 ```
 
 With Aces, you can see the actual 0s and 1s of files:

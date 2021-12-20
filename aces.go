@@ -89,6 +89,12 @@ func main() {
 		return
 	}
 
+	//b, err := ioutil.ReadAll(os.Stdin)
+	//fmt.Println("yooooo")
+	//fmt.Printf("%x", sha256.Sum256(b))
+	//return
+
+	//fmt.Println("ok")
 	bs := bitStreamer{chunkLen: numOfBits, in: os.Stdin}
 	err := bs.init()
 	if err != nil {
@@ -97,16 +103,21 @@ func main() {
 	res := make([]byte, 0, 2*1024)
 	for {
 		chunk, err := bs.next()
+		//fmt.Print(chunk, ";")
 		if err != nil {
 			if err == io.EOF {
+				//fmt.Println("rune set: ", encodeHaHa)
+				//fmt.Println("triggered write2")
 				os.Stdout.Write(res)
-				os.Stdout.WriteString("\n")
+				//os.Stdout.WriteString("\n")
+				os.Stdout.Close()
 				return
 			}
 			panic(err)
 		}
-		res = append(res, []byte(string(encodeHaHa[chunk]))...)
-		if len(res) > 1024 {
+		res = append(res, string(encodeHaHa[chunk])...)
+		if len(res) > 1024*7/2 {
+			//fmt.Println("triggered write")
 			os.Stdout.Write(res)
 			res = make([]byte, 0, 2*1024)
 		}
@@ -159,6 +170,7 @@ func (bs *bitStreamer) next() (b byte, e error) {
 		currByte := bs.buf[byteNum]
 		didChange := false
 		if byteNum+1 >= bs.bufN { // unlikely
+			//fmt.Println("OMG OMG OMG OMG HELLO                                HELLO")
 			didChange = true
 			eh := make([]byte, 1)
 			_, err := bs.in.Read(eh) // the actual data size doesn't change so we won't change n
