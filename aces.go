@@ -13,6 +13,7 @@ var (
 	encodeHaHa []rune
 	numOfBits  = 0
 	decode     bool
+	bufSize    = 16 * 1024
 	helpMsg    = `Aces - Encode in any character set
 
 Usage:
@@ -62,7 +63,7 @@ func main() {
 	}
 
 	if decode {
-		bw := bitWriter{chunkLen: numOfBits, out: os.Stdout}
+		bw := bitWriter{chunkLen: int(numOfBits), out: os.Stdout}
 		bw.init()
 		buf := make([]byte, 10*1024)
 		for {
@@ -76,7 +77,7 @@ func main() {
 			for _, c := range []rune(string(buf[:n])) {
 				for i, char := range encodeHaHa {
 					if c == char {
-						err := bw.write(byte(i), numOfBits)
+						err := bw.write(byte(i), int(numOfBits))
 						if err != nil {
 							panic(err)
 							return
@@ -95,7 +96,7 @@ func main() {
 	//return
 
 	//fmt.Println("ok")
-	bs := bitStreamer{chunkLen: numOfBits, in: os.Stdin}
+	bs := bitStreamer{chunkLen: int(numOfBits), in: os.Stdin}
 	err := bs.init()
 	if err != nil {
 		panic(err)
@@ -142,19 +143,29 @@ type bitStreamer struct {
 }
 
 func (bs *bitStreamer) init() error {
-	bs.buf = make([]byte, 16*1024)
+	bs.buf = make([]byte, bufSize)
 	n, err := bs.in.Read(bs.buf)
 	if err != nil {
 		return err
 	}
-	bs.bufN = n
+	bs.bufN = int(n)
 	return nil
 }
 
+//{0 0 1 0 1 1 1 0} {0 1 0 1 1 0 0 1} ... {0 0 ...
+
+// chunk len 3
+// 001,011,110,101,100,1 ??
+
 func (bs *bitStreamer) next() (b byte, e error) {
-	byteNum := bs.bitIdx / 8
-	bitNum := bs.bitIdx % 8
-	if byteNum >= bs.bufN { // need to read more?
+
+	byteNum := bs.bitIdx / 8 // 1 // 2047
+	if byteNum > bufSize+4 {
+		//panic(fmt.Sprint("ending at ", byteNum))
+	}
+	bitNum := bs.bitIdx % 8 // 7
+	if byteNum >= bs.bufN { // need to read more? bufN = 2
+		//errPrint("triggered read at bit idx", bs.bitIdx)
 		n, err := bs.in.Read(bs.buf)
 		if err != nil {
 			return 0, err
@@ -162,41 +173,63 @@ func (bs *bitStreamer) next() (b byte, e error) {
 		bs.bitIdx = bitNum
 		byteNum = bs.bitIdx / 8
 		bitNum = bs.bitIdx % 8
-		bs.bufN = n
+		bs.bufN = int(n)
 	}
 
 	var result byte
 	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
-		currByte := bs.buf[byteNum]
+		currByte := bs.buf[byteNum]                           // {0 1 0 1 1 0 0 1}
+		firstByte := sliceByteLen(currByte, bitNum, 8-bitNum) // correct :)))))))))))))))
 		didChange := false
-		if byteNum+1 >= bs.bufN { // unlikely
-			//fmt.Println("OMG OMG OMG OMG HELLO                                HELLO")
+		if byteNum+1 >= bs.bufN { // slicing across byte boundary and buffer boundary
+			//errPrint("oh my god at bit num", bitNum, "byte num", byteNum, "bufN", bs.bufN)
 			didChange = true
-			eh := make([]byte, 1)
-			_, err := bs.in.Read(eh) // the actual data size doesn't change so we won't change n
+			//newBuf := make([]byte, bufSize) // {0 0 ...}
+			var err error
+			bs.bufN, err = bs.in.Read(bs.buf) // the actual data size doesn't change so we won't change n
 			if err != nil {
-				eh[0] = 0 // let it read from null byte (size can be inferred automatically at decoder (result has to be multiples of 8 bits))
-				bs.bufN-- // next call should simpy exit so we make it as if there isn't any more data (which is actually already true)
+				bs.buf[0] = 0 // let it read from null byte (size can be inferred automatically at decoder (result has to be multiples of 8 bits))
+				//bs.bufN--     // next call should simply exit so we make it as if there isn't any more data (which is actually already true)
 			}
-			if byteNum+1 >= len(bs.buf) {
-				bs.buf = append(bs.buf, eh[0])
-			} else {
-				bs.buf[byteNum+1] = eh[0]
-			}
-			bs.bufN++
+			//errPrint(fmt.Sprintf("buf[0]: %b len: %d", bs.buf[0], bs.bufN))
+			//if byteNum+1 >= int(len(bs.buf)) {
+			//	bs.buf = append(bs.buf, bs.buf[0])
+			//	errPrint(fmt.Sprint(len(bs.buf), byteNum+1))
+			//} else {
+			//	//bs.buf[byteNum+1] = bs.buf[0]
+			//}
+			//bs.bufN++
 		}
-		nextByte := bs.buf[byteNum+1]
+		var nextByte byte
+		if didChange {
+			nextByte = bs.buf[0]
+		} else {
+			nextByte = bs.buf[byteNum+1]
+		}
+		//if byteNum > bufSize-2 {
+		//	//panic(fmt.Sprint("ending at ", byteNum))
+		//}
+		//errPrint(fmt.Sprintf("nextbyte: %b", nextByte))
 
-		firstByte := sliceByteLen(currByte, bitNum, 8-bitNum)
+		// correct :))))))))))))))))))))))))))))))))))))))          +      correct :)))))))))))))
 		result = (firstByte << byte(bs.chunkLen+bitNum-8)) + sliceByteLen(nextByte, 0, bs.chunkLen+bitNum-8)
 		if didChange {
-			bs.bitIdx += bs.chunkLen - (8 - bitNum)
+			bs.bitIdx = bs.chunkLen + bitNum - 8 //(bs.chunkLen + bitNum) % 8
+			//errPrint("bit idx", bs.bitIdx)
+		} else {
+			bs.bitIdx += bs.chunkLen
+			//errPrint("bit idx", bs.bitIdx)
 		}
+		return result, nil
 	} else {
 		result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
+		bs.bitIdx += bs.chunkLen
 	}
-	bs.bitIdx += bs.chunkLen
 	return result, nil
+}
+
+func errPrint(a ...interface{}) {
+	fmt.Fprintln(os.Stderr, a...)
 }
 
 type bitWriter struct {
@@ -208,13 +241,13 @@ type bitWriter struct {
 }
 
 func (bw *bitWriter) init() {
-	bw.buf = make([]byte, 16*1024)
+	bw.buf = make([]byte, bufSize)
 }
 
 func (bw *bitWriter) write(b byte, bLen int) error {
 	bitNum := bw.bitIdx % 8
 	byteNum := bw.bitIdx / 8
-	if byteNum >= len(bw.buf) {
+	if byteNum >= int(len(bw.buf)) {
 		_, err := bw.out.Write(bw.buf)
 		if err != nil {
 			return err
@@ -229,7 +262,7 @@ func (bw *bitWriter) write(b byte, bLen int) error {
 		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - bitNum - bLen))
 	} else {
 		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, 8-bLen, 8-bitNum)
-		if len(bw.buf) <= byteNum+1 {
+		if int(len(bw.buf)) <= byteNum+1 {
 			_, err := bw.out.Write(bw.buf[:byteNum+1])
 			if err != nil {
 				return err
