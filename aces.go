@@ -157,22 +157,15 @@ func (bs *bitStreamer) next() (byte, error) {
 
 	var result byte
 	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
-		currByte := bs.buf[byteNum]
-		firstByte := sliceByteLen(currByte, bitNum, 8-bitNum)
-		var nextByte byte
-		nextByte = bs.buf[byteNum+1]
-		secondByteLen := bs.chunkLen + bitNum - 8
-		result = (firstByte << byte(secondByteLen)) + sliceByteLen(nextByte, 0, secondByteLen)
+		firstByte := sliceByteLen(bs.buf[byteNum], bitNum, 8-bitNum)
+		secondPartLen := bs.chunkLen + bitNum - 8
+		result = (firstByte << secondPartLen) + sliceByteLen(bs.buf[byteNum+1], 0, secondPartLen)
 		bs.bitIdx += bs.chunkLen
 		return result, nil
 	}
 	result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
 	bs.bitIdx += bs.chunkLen
 	return result, nil
-}
-
-func errPrint(a ...interface{}) {
-	fmt.Fprintln(os.Stderr, a...)
 }
 
 type bitWriter struct {
@@ -198,13 +191,19 @@ func (bw *bitWriter) write(b byte) error {
 		}
 		bw.init()
 		bw.bitIdx = 0
-		bitNum = bw.bitIdx % 8
-		byteNum = bw.bitIdx / 8
+		bitNum = 0
+		byteNum = 0
 	}
 
-	if bitNum+bw.chunkLen > 8 {
-		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, 8-bw.chunkLen, 8-bitNum)
-		bw.buf[byteNum+1] = sliceByteLen(b, 8-bw.chunkLen+8-bitNum, bw.chunkLen+bitNum-8) << byte(8-bw.chunkLen+8-bitNum)
+	if bitNum+bw.chunkLen > 8 { // write across byte boundary?
+		// 8-bw.chunkLen is where b's actual data starts from.
+		bStart := 8 - bw.chunkLen
+		// space left in current byte
+		left := 8 - bitNum
+
+		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, bStart, left)
+		// bStart + left is up to where b has been read from. (bw.chunkLen+bitNum) - 8 is how many bits go to the next byte.
+		bw.buf[byteNum+1] = sliceByteLen(b, bStart+left, bw.chunkLen-left) << (bStart - left) // simplified 8 - (bw.chunkLen + bitNum - 8)
 	} else {
 		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - (bitNum + bw.chunkLen)))
 	}
