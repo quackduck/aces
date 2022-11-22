@@ -203,7 +203,7 @@ func (bw *bitWriter) write(b byte) error {
 
 		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, bStart, left)
 		// bStart + left is up to where b has been read from. (bw.chunkLen+bitNum) - 8 is how many bits go to the next byte.
-		bw.buf[byteNum+1] = sliceByteLen(b, bStart+left, bw.chunkLen-left) << (bStart - left) // simplified 8 - (bw.chunkLen + bitNum - 8)
+		bw.buf[byteNum+1] = sliceByteLen(b, bStart+left, bw.chunkLen-left) << (bStart + left) // simplified 8 - (bw.chunkLen + bitNum - 8)
 	} else {
 		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - (bitNum + bw.chunkLen)))
 	}
