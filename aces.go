@@ -1,5 +1,3 @@
-// can't believe this code actually works lol
-
 package main
 
 import (
@@ -7,14 +5,16 @@ import (
 	"io"
 	"math"
 	"os"
+
+	"github.com/quackduck/aces/pkg"
 )
 
 var (
 	encodeHaHa []rune
 	numOfBits  = 0
 	decode     bool
-	bufSize    = 16 * 1024
-	helpMsg    = `Aces - Encode in any character set
+
+	helpMsg = `Aces - Encode in any character set
 
 Usage:
    aces <charset>               - encode data from STDIN into <charset>
@@ -63,8 +63,7 @@ func main() {
 	}
 
 	if decode {
-		bw := bitWriter{chunkLen: numOfBits, out: os.Stdout}
-		bw.init()
+		bw := aces.NewBitWriter(numOfBits, os.Stdout)
 		buf := make([]byte, 10*1024)
 		for {
 			n, err := os.Stdin.Read(buf)
@@ -77,7 +76,7 @@ func main() {
 			for _, c := range []rune(string(buf[:n])) {
 				for i, char := range encodeHaHa {
 					if c == char {
-						err := bw.write(byte(i))
+						err := bw.Write(byte(i))
 						if err != nil {
 							panic(err)
 							return
@@ -86,18 +85,17 @@ func main() {
 				}
 			}
 		}
-		bw.flush()
+		bw.Flush()
 		return
 	}
 
-	bs := bitStreamer{chunkLen: numOfBits, in: os.Stdin}
-	err := bs.init()
+	bs, err := aces.NewBitReader(numOfBits, os.Stdin)
 	if err != nil {
 		panic(err)
 	}
-	res := make([]byte, 0, 2*1024)
+	res := make([]byte, 0, 10*1024)
 	for {
-		chunk, err := bs.next()
+		chunk, err := bs.Read()
 		if err != nil {
 			if err == io.EOF {
 				os.Stdout.Write(res)
@@ -112,107 +110,4 @@ func main() {
 			res = make([]byte, 0, 2*1024)
 		}
 	}
-}
-
-// sliceByteLen slices the byte b such that the result has length len and starting bit start
-func sliceByteLen(b byte, start int, len int) byte {
-	return (b << start) >> byte(8-len)
-}
-
-type bitStreamer struct {
-	// set these
-	chunkLen int
-	in       io.Reader
-
-	// internal vars
-	buf    []byte
-	bitIdx int
-	bufN   int
-}
-
-func (bs *bitStreamer) init() error {
-	//bufSize % bs.chunkLen == 0 so that we never have to read across the buffer boundary
-	bs.buf = make([]byte, bufSize-bufSize%bs.chunkLen)
-	var err error
-	bs.bufN, err = bs.in.Read(bs.buf)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (bs *bitStreamer) next() (byte, error) {
-	byteNum := bs.bitIdx / 8
-	bitNum := bs.bitIdx % 8
-	if byteNum >= bs.bufN { // need to read more
-		n, err := bs.in.Read(bs.buf)
-		if err != nil {
-			return 0, err
-		}
-		bs.bitIdx = bitNum
-		byteNum = bs.bitIdx / 8
-		bitNum = bs.bitIdx % 8
-		bs.bufN = n
-	}
-
-	var result byte
-	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
-		firstByte := sliceByteLen(bs.buf[byteNum], bitNum, 8-bitNum)
-		secondPartLen := bs.chunkLen + bitNum - 8
-		result = (firstByte << secondPartLen) + sliceByteLen(bs.buf[byteNum+1], 0, secondPartLen)
-		bs.bitIdx += bs.chunkLen
-		return result, nil
-	}
-	result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
-	bs.bitIdx += bs.chunkLen
-	return result, nil
-}
-
-type bitWriter struct {
-	chunkLen int
-	out      io.Writer
-
-	buf    []byte
-	bitIdx int
-}
-
-func (bw *bitWriter) init() {
-	//bufSize % bw.chunkLen == 0 so that we never have to write across the buffer boundary
-	bw.buf = make([]byte, bufSize-bufSize%bw.chunkLen)
-}
-
-func (bw *bitWriter) write(b byte) error {
-	bitNum := bw.bitIdx % 8
-	byteNum := bw.bitIdx / 8
-	if byteNum >= len(bw.buf) {
-		_, err := bw.out.Write(bw.buf)
-		if err != nil {
-			return err
-		}
-		bw.init()
-		bw.bitIdx = 0
-		bitNum = 0
-		byteNum = 0
-	}
-
-	if bitNum+bw.chunkLen > 8 { // write across byte boundary?
-		// 8-bw.chunkLen is where b's actual data starts from.
-		bStart := 8 - bw.chunkLen
-		// space left in current byte
-		left := 8 - bitNum
-
-		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, bStart, left)
-		// bStart + left is up to where b has been read from. (bw.chunkLen+bitNum) - 8 is how many bits go to the next byte.
-		bw.buf[byteNum+1] = sliceByteLen(b, bStart+left, bw.chunkLen-left) << (bStart + left) // simplified 8 - (bw.chunkLen + bitNum - 8)
-	} else {
-		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - (bitNum + bw.chunkLen)))
-	}
-	bw.bitIdx += bw.chunkLen
-	return nil
-}
-
-// call this only at the end
-func (bw *bitWriter) flush() error {
-	_, err := bw.out.Write(bw.buf[:bw.bitIdx/8])
-	return err
 }
