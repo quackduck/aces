@@ -1,113 +1,108 @@
-package main
+package aces
 
-import (
-	"fmt"
-	"io"
-	"math"
-	"os"
+import "io"
 
-	"github.com/quackduck/aces/pkg"
-)
+var BufSize = 16 * 1024
 
-var (
-	encodeHaHa []rune
-	numOfBits  = 0
-	decode     bool
+// sliceByteLen slices the byte b such that the result has length len and starting bit start
+func sliceByteLen(b byte, start int, len int) byte {
+	return (b << start) >> byte(8-len)
+}
 
-	helpMsg = `Aces - Encode in any character set
+type BitReader struct {
+	// set these
+	chunkLen int
+	in       io.Reader
 
-Usage:
-   aces <charset>               - encode data from STDIN into <charset>
-   aces -d/--decode <charset>   - decode data from STDIN from <charset>
-   aces -h/--help               - print this help message
+	// internal vars
+	buf    []byte
+	bitIdx int
+	bufN   int
+}
 
-Aces reads from STDIN for your data and outputs the result to STDOUT. The charset length must be
-a power of 2. While decoding, bytes not in the charset are ignored. Aces does not add any padding.
-
-Examples:
-   echo hello world | aces "<>(){}[]" | aces --decode "<>(){}[]"      # basic usage
-   echo matthew stanciu | aces HhAa | say                             # make funny sounds (macOS)
-   aces " X" < /bin/echo                                              # see binaries visually
-   echo 0100100100100001 | aces -d 01 | aces 01234567                 # convert bases
-   echo Calculus | aces 01                                            # what's stuff in binary?
-   echo Aces™ | base64 | aces -d
-   ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
-
-File issues, contribute or star at github.com/quackduck/aces`
-)
-
-func main() {
-	if len(os.Args) == 1 {
-		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
-		os.Exit(1)
-	}
-	if os.Args[1] == "-h" || os.Args[1] == "--help" {
-		fmt.Println(helpMsg)
-		return
-	}
-	decode = os.Args[1] == "--decode" || os.Args[1] == "-d"
-	if decode {
-		if len(os.Args) == 2 {
-			fmt.Fprintln(os.Stderr, "error: need character set\n"+helpMsg)
-			os.Exit(1)
-		}
-		encodeHaHa = []rune(os.Args[2])
-	} else {
-		encodeHaHa = []rune(os.Args[1])
-	}
-	numOfBits = int(math.Log2(float64(len(encodeHaHa))))
-	if 1<<numOfBits != len(encodeHaHa) {
-		numOfBits = int(math.Round(math.Log2(float64(len(encodeHaHa)))))
-		fmt.Fprintln(os.Stderr, "error: charset length is not a power of two.\n   have:", len(encodeHaHa), "\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(encodeHaHa)-1<<numOfBits)), "away)")
-		os.Exit(1)
-	}
-
-	if decode {
-		bw := aces.NewBitWriter(numOfBits, os.Stdout)
-		buf := make([]byte, 10*1024)
-		for {
-			n, err := os.Stdin.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				panic(err)
-			}
-			for _, c := range []rune(string(buf[:n])) {
-				for i, char := range encodeHaHa {
-					if c == char {
-						err := bw.Write(byte(i))
-						if err != nil {
-							panic(err)
-							return
-						}
-					}
-				}
-			}
-		}
-		bw.Flush()
-		return
-	}
-
-	bs, err := aces.NewBitReader(numOfBits, os.Stdin)
+func NewBitReader(chunkLen int, in io.Reader) (*BitReader, error) {
+	//bufSize % bs.chunkLen == 0 so that we never have to read across the buffer boundary
+	bs := &BitReader{chunkLen: chunkLen, in: in, buf: make([]byte, BufSize-BufSize%chunkLen)}
+	var err error
+	bs.bufN, err = bs.in.Read(bs.buf)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	res := make([]byte, 0, 10*1024)
-	for {
-		chunk, err := bs.Read()
+	return bs, nil
+}
+
+func (bs *BitReader) Read() (byte, error) {
+	byteNum := bs.bitIdx / 8
+	bitNum := bs.bitIdx % 8
+	if byteNum >= bs.bufN { // need to read more
+		n, err := bs.in.Read(bs.buf)
 		if err != nil {
-			if err == io.EOF {
-				os.Stdout.Write(res)
-				os.Stdout.Close()
-				return
-			}
-			panic(err)
+			return 0, err
 		}
-		res = append(res, string(encodeHaHa[chunk])...)
-		if len(res) > 1024*7/2 {
-			os.Stdout.Write(res)
-			res = make([]byte, 0, 2*1024)
-		}
+		bs.bitIdx = bitNum
+		byteNum = bs.bitIdx / 8
+		bitNum = bs.bitIdx % 8
+		bs.bufN = n
 	}
+
+	var result byte
+	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
+		firstByte := sliceByteLen(bs.buf[byteNum], bitNum, 8-bitNum)
+		secondPartLen := bs.chunkLen + bitNum - 8
+		result = (firstByte << secondPartLen) + sliceByteLen(bs.buf[byteNum+1], 0, secondPartLen)
+		bs.bitIdx += bs.chunkLen
+		return result, nil
+	}
+	result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
+	bs.bitIdx += bs.chunkLen
+	return result, nil
+}
+
+type BitWriter struct {
+	chunkLen int
+	out      io.Writer
+
+	buf    []byte
+	bitIdx int
+}
+
+func NewBitWriter(chunkLen int, out io.Writer) *BitWriter {
+	//bufSize % bw.chunkLen == 0 so that we never have to write across the buffer boundary
+	return &BitWriter{chunkLen: chunkLen, out: out, buf: make([]byte, BufSize-BufSize%chunkLen)}
+}
+
+func (bw *BitWriter) Write(b byte) error {
+	bitNum := bw.bitIdx % 8
+	byteNum := bw.bitIdx / 8
+	if byteNum >= len(bw.buf) {
+		_, err := bw.out.Write(bw.buf)
+		if err != nil {
+			return err
+		}
+		bw.buf = make([]byte, BufSize-BufSize%bw.chunkLen)
+		bw.bitIdx = 0
+		bitNum = 0
+		byteNum = 0
+	}
+
+	if bitNum+bw.chunkLen > 8 { // write across byte boundary?
+		// 8-bw.chunkLen is where b's actual data starts from.
+		bStart := 8 - bw.chunkLen
+		// space left in current byte
+		left := 8 - bitNum
+
+		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, bStart, left)
+		// bStart + left is up to where b has been read from. (bw.chunkLen+bitNum) - 8 is how many bits go to the next byte.
+		bw.buf[byteNum+1] = sliceByteLen(b, bStart+left, bw.chunkLen-left) << (bStart + left) // simplified 8 - (bw.chunkLen + bitNum - 8)
+	} else {
+		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - (bitNum + bw.chunkLen)))
+	}
+	bw.bitIdx += bw.chunkLen
+	return nil
+}
+
+// Flush writes the rest of the buffer. Only call this at the end of the stream.
+func (bw *BitWriter) Flush() error {
+	_, err := bw.out.Write(bw.buf[:bw.bitIdx/8])
+	return err
 }
