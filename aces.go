@@ -131,7 +131,8 @@ type bitStreamer struct {
 }
 
 func (bs *bitStreamer) init() error {
-	bs.buf = make([]byte, bufSize)
+	//bufSize % bs.chunkLen == 0 so that we never have to read across the buffer boundary
+	bs.buf = make([]byte, bufSize-bufSize%bs.chunkLen)
 	var err error
 	bs.bufN, err = bs.in.Read(bs.buf)
 	if err != nil {
@@ -158,29 +159,11 @@ func (bs *bitStreamer) next() (byte, error) {
 	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
 		currByte := bs.buf[byteNum]
 		firstByte := sliceByteLen(currByte, bitNum, 8-bitNum)
-		newBuffer := false
-		if byteNum+1 >= bs.bufN { // slicing across byte boundary and buffer boundary
-			newBuffer = true
-			var err error
-			bs.bufN, err = bs.in.Read(bs.buf)
-			if err != nil {
-				bs.buf[0] = 0 // let it read from null byte (size can be inferred automatically at decoder (result has to be multiples of 8 bits))
-			}
-		}
 		var nextByte byte
-		if newBuffer {
-			nextByte = bs.buf[0]
-		} else {
-			nextByte = bs.buf[byteNum+1]
-		}
-
+		nextByte = bs.buf[byteNum+1]
 		secondByteLen := bs.chunkLen + bitNum - 8
 		result = (firstByte << byte(secondByteLen)) + sliceByteLen(nextByte, 0, secondByteLen)
-		if newBuffer {
-			bs.bitIdx = secondByteLen
-		} else {
-			bs.bitIdx += bs.chunkLen
-		}
+		bs.bitIdx += bs.chunkLen
 		return result, nil
 	}
 	result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
@@ -221,19 +204,7 @@ func (bw *bitWriter) write(b byte) error {
 
 	if bitNum+bw.chunkLen > 8 {
 		bw.buf[byteNum] = bw.buf[byteNum] + sliceByteLen(b, 8-bw.chunkLen, 8-bitNum)
-		if len(bw.buf) <= byteNum+1 {
-			_, err := bw.out.Write(bw.buf[:byteNum+1])
-			if err != nil {
-				return err
-			}
-			bw.init()
-			bw.buf[0] = sliceByteLen(b, 8-bw.chunkLen+8-bitNum, bw.chunkLen+bitNum-8) << byte(8-bw.chunkLen+8-bitNum)
-			bw.bitIdx = 0
-			byteNum = 0
-			bitNum = 0
-		} else {
-			bw.buf[byteNum+1] = sliceByteLen(b, 8-bw.chunkLen+8-bitNum, bw.chunkLen+bitNum-8) << byte(8-bw.chunkLen+8-bitNum)
-		}
+		bw.buf[byteNum+1] = sliceByteLen(b, 8-bw.chunkLen+8-bitNum, bw.chunkLen+bitNum-8) << byte(8-bw.chunkLen+8-bitNum)
 	} else {
 		bw.buf[byteNum] = bw.buf[byteNum] + (b << (8 - (bitNum + bw.chunkLen)))
 	}
