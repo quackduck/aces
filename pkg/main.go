@@ -1,5 +1,3 @@
-// can't believe this code actually works lol
-
 package aces
 
 import "io"

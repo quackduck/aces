@@ -1,3 +1,3 @@
-module github.com/quackduck/aces
+module github.com/quackduck/aces/pkg
 
-go 1.19
+go 1.18
