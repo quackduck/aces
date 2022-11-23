@@ -93,21 +93,21 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	res := make([]byte, 0, 10*1024)
+	res := make([]rune, 0, 10*1024)
 	for {
 		chunk, err := bs.Read()
 		if err != nil {
 			if err == io.EOF {
-				os.Stdout.Write(res)
+				os.Stdout.WriteString(string(res))
 				os.Stdout.Close()
 				return
 			}
 			panic(err)
 		}
-		res = append(res, string(encodeHaHa[chunk])...)
-		if len(res) > 1024*7/2 {
-			os.Stdout.Write(res)
-			res = make([]byte, 0, 2*1024)
+		res = append(res, encodeHaHa[chunk])
+		if len(res) == 10*1024 {
+			os.Stdout.WriteString(string(res))
+			res = make([]rune, 0, 10*1024)
 		}
 	}
 }
