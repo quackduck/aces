@@ -31,30 +31,30 @@ func NewBitReader(chunkLen int, in io.Reader) (*BitReader, error) {
 	return bs, nil
 }
 
-func (bs *BitReader) Read() (byte, error) {
-	byteNum := bs.bitIdx / 8
-	bitNum := bs.bitIdx % 8
-	if byteNum >= bs.bufN { // need to read more
-		n, err := bs.in.Read(bs.buf)
+func (br *BitReader) Read() (byte, error) {
+	byteNum := br.bitIdx / 8
+	bitNum := br.bitIdx % 8
+	if byteNum >= br.bufN { // need to read more
+		n, err := br.in.Read(br.buf)
 		if err != nil {
 			return 0, err
 		}
-		bs.bitIdx = bitNum
-		byteNum = bs.bitIdx / 8
-		bitNum = bs.bitIdx % 8
-		bs.bufN = n
+		br.bitIdx = bitNum
+		byteNum = br.bitIdx / 8
+		bitNum = br.bitIdx % 8
+		br.bufN = n
 	}
 
 	var result byte
-	if bitNum+bs.chunkLen > 8 { // want to slice past current byte
-		firstByte := sliceByteLen(bs.buf[byteNum], bitNum, 8-bitNum)
-		secondPartLen := bs.chunkLen + bitNum - 8
-		result = (firstByte << secondPartLen) + sliceByteLen(bs.buf[byteNum+1], 0, secondPartLen)
-		bs.bitIdx += bs.chunkLen
+	if bitNum+br.chunkLen > 8 { // want to slice past current byte
+		firstByte := sliceByteLen(br.buf[byteNum], bitNum, 8-bitNum)
+		secondPartLen := br.chunkLen + bitNum - 8
+		result = (firstByte << secondPartLen) + sliceByteLen(br.buf[byteNum+1], 0, secondPartLen)
+		br.bitIdx += br.chunkLen
 		return result, nil
 	}
-	result = sliceByteLen(bs.buf[byteNum], bitNum, bs.chunkLen)
-	bs.bitIdx += bs.chunkLen
+	result = sliceByteLen(br.buf[byteNum], bitNum, br.chunkLen)
+	br.bitIdx += br.chunkLen
 	return result, nil
 }
 
