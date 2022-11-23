@@ -65,6 +65,10 @@ func main() {
 	if decode {
 		bw := aces.NewBitWriter(numOfBits, os.Stdout)
 		buf := make([]byte, 10*1024)
+		runeToByte := make(map[rune]byte)
+		for i, r := range encodeHaHa {
+			runeToByte[r] = byte(i)
+		}
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil {
@@ -74,14 +78,10 @@ func main() {
 				panic(err)
 			}
 			for _, c := range []rune(string(buf[:n])) {
-				for i, char := range encodeHaHa {
-					if c == char {
-						err := bw.Write(byte(i))
-						if err != nil {
-							panic(err)
-							return
-						}
-					}
+				err := bw.Write(runeToByte[c])
+				if err != nil {
+					panic(err)
+					return
 				}
 			}
 		}
