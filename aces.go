@@ -125,6 +125,13 @@ func NewCoding(charset []rune) (*Coding, error) {
 				"\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(charset)-1<<numOfBits)), "away)"),
 		)
 	}
+	seen := make(map[rune]bool)
+	for _, r := range charset {
+		if seen[r] {
+			return nil, errors.New("charset contains duplicates")
+		}
+		seen[r] = true
+	}
 	return &Coding{charset: charset, numOfBits: numOfBits}, nil
 }
 
