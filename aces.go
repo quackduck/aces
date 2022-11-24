@@ -1,6 +1,13 @@
 package aces
 
-import "io"
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"os"
+)
 
 var BufSize = 16 * 1024
 
@@ -103,4 +110,79 @@ func (bw *BitWriter) Write(b byte) error {
 func (bw *BitWriter) Flush() error {
 	_, err := bw.out.Write(bw.buf[:bw.bitIdx/8])
 	return err
+}
+
+type Coding struct {
+	charset   []rune
+	numOfBits int
+}
+
+func NewCoding(charset []rune) (*Coding, error) {
+	numOfBits := int(math.Log2(float64(len(charset))))
+	if 1<<numOfBits != len(charset) {
+		numOfBits = int(math.Round(math.Log2(float64(len(charset)))))
+		return nil, errors.New(
+			fmt.Sprintln("charset length is not a power of two.\n   have:", len(charset),
+				"\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(charset)-1<<numOfBits)), "away)"),
+		)
+	}
+	return &Coding{charset: charset, numOfBits: numOfBits}, nil
+}
+
+func (c *Coding) EncodeToFrom(writer io.Writer, reader io.Reader) error {
+	bs, err := NewBitReader(c.numOfBits, reader)
+	if err != nil {
+		panic(err)
+	}
+	buf := make([]rune, 0, 10*1024)
+	var chunk byte
+	for {
+		chunk, err = bs.Read()
+		if err != nil {
+			if err == io.EOF {
+				_, err = writer.Write([]byte(string(buf)))
+				if err != nil {
+					return err
+				}
+				err = os.Stdout.Close()
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+			return err
+		}
+		buf = append(buf, c.charset[chunk])
+		if len(buf) == cap(buf) {
+			_, err = writer.Write([]byte(string(buf)))
+			if err != nil {
+				return err
+			}
+			buf = buf[:0]
+		}
+	}
+}
+
+func (c *Coding) DecodeToFrom(writer io.Writer, reader io.Reader) error {
+	bw := NewBitWriter(c.numOfBits, writer)
+	bufStdin := bufio.NewReaderSize(reader, 10*1024)
+	runeToByte := make(map[rune]byte, len(c.charset))
+	for i, r := range c.charset {
+		runeToByte[r] = byte(i)
+	}
+	for {
+		r, _, err := bufStdin.ReadRune()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		err = bw.Write(runeToByte[r])
+		if err != nil {
+			return err
+		}
+	}
+	bw.Flush()
+	return nil
 }

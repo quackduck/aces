@@ -1,20 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"io"
-	"math"
 	"os"
 
 	"github.com/quackduck/aces"
 )
 
 var (
-	encodeHaHa []rune
-	numOfBits  = 0
-	decode     bool
-
 	helpMsg = `Aces - Encode in any character set
 
 Usage:
@@ -38,6 +31,7 @@ File issues, contribute or star at github.com/quackduck/aces`
 )
 
 func main() {
+	var charset []rune
 	if len(os.Args) == 1 {
 		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
 		os.Exit(1)
@@ -46,68 +40,33 @@ func main() {
 		fmt.Println(helpMsg)
 		return
 	}
-	decode = os.Args[1] == "--decode" || os.Args[1] == "-d"
+	decode := os.Args[1] == "--decode" || os.Args[1] == "-d"
 	if decode {
 		if len(os.Args) == 2 {
 			fmt.Fprintln(os.Stderr, "error: need character set\n"+helpMsg)
 			os.Exit(1)
 		}
-		encodeHaHa = []rune(os.Args[2])
+		charset = []rune(os.Args[2])
 	} else {
-		encodeHaHa = []rune(os.Args[1])
+		charset = []rune(os.Args[1])
 	}
-	numOfBits = int(math.Log2(float64(len(encodeHaHa))))
-	if 1<<numOfBits != len(encodeHaHa) {
-		numOfBits = int(math.Round(math.Log2(float64(len(encodeHaHa)))))
-		fmt.Fprintln(os.Stderr, "error: charset length is not a power of two.\n   have:", len(encodeHaHa), "\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(encodeHaHa)-1<<numOfBits)), "away)")
+
+	c, err := aces.NewCoding(charset)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 
 	if decode {
-		bw := aces.NewBitWriter(numOfBits, os.Stdout)
-		bufStdin := bufio.NewReaderSize(os.Stdin, 10*1024)
-		runeToByte := make(map[rune]byte, len(encodeHaHa))
-		for i, r := range encodeHaHa {
-			runeToByte[r] = byte(i)
+		err := c.DecodeToFrom(os.Stdout, os.Stdin)
+		if err != nil {
+			panic(err)
 		}
-		for {
-			r, _, err := bufStdin.ReadRune()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				panic(err)
-			}
-			err = bw.Write(runeToByte[r])
-			if err != nil {
-				panic(err)
-				return
-			}
-		}
-		bw.Flush()
 		return
 	}
 
-	bs, err := aces.NewBitReader(numOfBits, os.Stdin)
+	err = c.EncodeToFrom(os.Stdout, os.Stdin)
 	if err != nil {
 		panic(err)
-	}
-	res := make([]rune, 0, 10*1024)
-	for {
-		chunk, err := bs.Read()
-		if err != nil {
-			if err == io.EOF {
-				os.Stdout.WriteString(string(res))
-				os.Stdout.Close()
-				return
-			}
-			panic(err)
-		}
-		res = append(res, encodeHaHa[chunk])
-		if len(res) == cap(res) {
-			os.Stdout.WriteString(string(res))
-			res = res[:0]
-			//res = make([]rune, 0, 10*1024)
-		}
 	}
 }
