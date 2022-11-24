@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 )
 
 var BufSize = 16 * 1024
@@ -141,10 +140,6 @@ func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
 		if err != nil {
 			if err == io.EOF {
 				_, err = dst.Write([]byte(string(buf)))
-				if err != nil {
-					return err
-				}
-				err = os.Stdout.Close()
 				if err != nil {
 					return err
 				}
