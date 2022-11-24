@@ -10,11 +10,9 @@ func sliceByteLen(b byte, start int, len int) byte {
 }
 
 type BitReader struct {
-	// set these
 	chunkLen int
 	in       io.Reader
 
-	// internal vars
 	buf    []byte
 	bitIdx int
 	bufN   int

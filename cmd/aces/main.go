@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"math"
@@ -64,25 +65,23 @@ func main() {
 
 	if decode {
 		bw := aces.NewBitWriter(numOfBits, os.Stdout)
-		buf := make([]byte, 10*1024)
-		runeToByte := make(map[rune]byte)
+		bufStdin := bufio.NewReaderSize(os.Stdin, 10*1024)
+		runeToByte := make(map[rune]byte, len(encodeHaHa))
 		for i, r := range encodeHaHa {
 			runeToByte[r] = byte(i)
 		}
 		for {
-			n, err := os.Stdin.Read(buf)
+			r, _, err := bufStdin.ReadRune()
 			if err != nil {
 				if err == io.EOF {
 					break
 				}
 				panic(err)
 			}
-			for _, c := range []rune(string(buf[:n])) {
-				err := bw.Write(runeToByte[c])
-				if err != nil {
-					panic(err)
-					return
-				}
+			err = bw.Write(runeToByte[r])
+			if err != nil {
+				panic(err)
+				return
 			}
 		}
 		bw.Flush()
@@ -105,9 +104,10 @@ func main() {
 			panic(err)
 		}
 		res = append(res, encodeHaHa[chunk])
-		if len(res) == 10*1024 {
+		if len(res) == cap(res) {
 			os.Stdout.WriteString(string(res))
-			res = make([]rune, 0, 10*1024)
+			res = res[:0]
+			//res = make([]rune, 0, 10*1024)
 		}
 	}
 }
