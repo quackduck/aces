@@ -129,8 +129,8 @@ func NewCoding(charset []rune) (*Coding, error) {
 	return &Coding{charset: charset, numOfBits: numOfBits}, nil
 }
 
-func (c *Coding) EncodeToFrom(writer io.Writer, reader io.Reader) error {
-	bs, err := NewBitReader(c.numOfBits, reader)
+func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
+	bs, err := NewBitReader(c.numOfBits, src)
 	if err != nil {
 		panic(err)
 	}
@@ -140,7 +140,7 @@ func (c *Coding) EncodeToFrom(writer io.Writer, reader io.Reader) error {
 		chunk, err = bs.Read()
 		if err != nil {
 			if err == io.EOF {
-				_, err = writer.Write([]byte(string(buf)))
+				_, err = dst.Write([]byte(string(buf)))
 				if err != nil {
 					return err
 				}
@@ -154,7 +154,7 @@ func (c *Coding) EncodeToFrom(writer io.Writer, reader io.Reader) error {
 		}
 		buf = append(buf, c.charset[chunk])
 		if len(buf) == cap(buf) {
-			_, err = writer.Write([]byte(string(buf)))
+			_, err = dst.Write([]byte(string(buf)))
 			if err != nil {
 				return err
 			}
@@ -163,9 +163,9 @@ func (c *Coding) EncodeToFrom(writer io.Writer, reader io.Reader) error {
 	}
 }
 
-func (c *Coding) DecodeToFrom(writer io.Writer, reader io.Reader) error {
-	bw := NewBitWriter(c.numOfBits, writer)
-	bufStdin := bufio.NewReaderSize(reader, 10*1024)
+func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
+	bw := NewBitWriter(c.numOfBits, dst)
+	bufStdin := bufio.NewReaderSize(src, 10*1024)
 	runeToByte := make(map[rune]byte, len(c.charset))
 	for i, r := range c.charset {
 		runeToByte[r] = byte(i)

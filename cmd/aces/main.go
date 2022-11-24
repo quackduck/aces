@@ -58,14 +58,14 @@ func main() {
 	}
 
 	if decode {
-		err := c.DecodeToFrom(os.Stdout, os.Stdin)
+		err := c.Decode(os.Stdout, os.Stdin)
 		if err != nil {
 			panic(err)
 		}
 		return
 	}
 
-	err = c.EncodeToFrom(os.Stdout, os.Stdin)
+	err = c.Encode(os.Stdout, os.Stdin)
 	if err != nil {
 		panic(err)
 	}
