@@ -8,13 +8,15 @@ import (
 	"math"
 )
 
-var BufSize int = 16 * 1024
+// BufSize is the size of the buffers used by BitReader and BitWriter.
+var BufSize = 16 * 1024
 
 // sliceByteLen slices the byte b such that the result has length len and starting bit start
 func sliceByteLen(b byte, start uint8, len uint8) byte {
 	return (b << start) >> (8 - len)
 }
 
+// BitReader reads a constant number of bits from an io.Reader
 type BitReader struct {
 	chunkLen uint8
 	in       io.Reader
@@ -25,6 +27,7 @@ type BitReader struct {
 	bufN    int // limited by read size which cannot exceed an int
 }
 
+// NewBitReader returns a BitReader that reads chunkLen bits at a time from in.
 func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
 	// bufSize % chunkLen == 0 so that we never have to read across the buffer boundary
 	bs := &BitReader{chunkLen: chunkLen, in: in, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
@@ -36,6 +39,8 @@ func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
 	return bs, nil
 }
 
+// Read returns the next chunkLen bits from the stream. If there is no more data to read, it returns io.EOF.
+// For example, if chunkLen is 3 and the next 3 bits are 101, Read returns 5, nil.
 func (br *BitReader) Read() (byte, error) {
 	if br.byteIdx >= br.bufN { // need to read more
 		n, err := br.in.Read(br.buf)
@@ -62,6 +67,7 @@ func (br *BitReader) Read() (byte, error) {
 	return result, nil
 }
 
+// BitWriter writes a constant number of bits to an io.Writer
 type BitWriter struct {
 	chunkLen uint8
 	out      io.Writer
@@ -71,11 +77,14 @@ type BitWriter struct {
 	byteIdx int
 }
 
+// NewBitWriter returns a BitWriter that writes chunkLen bits at a time to out.
 func NewBitWriter(chunkLen uint8, out io.Writer) *BitWriter {
 	//bufSize % chunkLen == 0 so that we never have to write across the buffer boundary
 	return &BitWriter{chunkLen: chunkLen, out: out, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
 }
 
+// Write writes the last chunkLen bits from b to the stream.
+// For example, if chunkLen is 3 and b is 00000101, Write writes 101.
 func (bw *BitWriter) Write(b byte) error {
 	if bw.byteIdx >= len(bw.buf) {
 		_, err := bw.out.Write(bw.buf)
@@ -108,19 +117,31 @@ func (bw *BitWriter) Write(b byte) error {
 	return nil
 }
 
-// Flush writes the rest of the buffer. Only call this at the end of the stream.
+// Flush writes any remaining data in the buffer to the underlying io.Writer.
 func (bw *BitWriter) Flush() error {
 	_, err := bw.out.Write(bw.buf[:bw.byteIdx])
 	return err
 }
 
+// Coding represents an encoding scheme like hex, base64, base32 etc.
+// It allows for any custom character set, such as "HhAa" and "😱📣".
 type Coding struct {
 	charset   []rune
 	numOfBits uint8
 }
 
-// NewCoding creates a new Coding with the given character set. The length of the character set must be a power of 2
-// and must not contain duplicate runes.
+// NewCoding creates a new Coding with the given character set.
+// The length of the character set must be a power of 2 not larger than 256 and must not contain duplicate runes.
+//
+// For example,
+//
+//	NewCoding([]rune("0123456789abcdef"))
+//
+// creates a hex encoding scheme, and
+//
+//	NewCoding([]rune(" ❗"))
+//
+// creates a binary encoding scheme: 0s are represented by a space and 1s are represented by an exclamation mark.
 func NewCoding(charset []rune) (*Coding, error) {
 	numOfBits := uint8(math.Log2(float64(len(charset))))
 	if 1<<numOfBits != len(charset) {
@@ -140,6 +161,7 @@ func NewCoding(charset []rune) (*Coding, error) {
 	return &Coding{charset: charset, numOfBits: numOfBits}, nil
 }
 
+// Encode encodes data from src and writes to dst.
 func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
 	bs, err := NewBitReader(c.numOfBits, src)
 	if err != nil {
@@ -170,6 +192,7 @@ func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
 	}
 }
 
+// Decode decodes data from src and writes to dst.
 func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
 	bw := NewBitWriter(c.numOfBits, dst)
 	bufStdin := bufio.NewReaderSize(src, 10*1024)
