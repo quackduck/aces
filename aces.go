@@ -116,6 +116,8 @@ type Coding struct {
 	numOfBits int
 }
 
+// NewCoding creates a new Coding with the given character set. The length of the character set must be a power of 2
+// and must not contain duplicate runes.
 func NewCoding(charset []rune) (*Coding, error) {
 	numOfBits := int(math.Log2(float64(len(charset))))
 	if 1<<numOfBits != len(charset) {
