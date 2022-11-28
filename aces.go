@@ -30,21 +30,21 @@ type BitReader struct {
 // NewBitReader returns a BitReader that reads chunkLen bits at a time from in.
 func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
 	// bufSize % chunkLen == 0 so that we never have to read across the buffer boundary
-	bs := &BitReader{chunkLen: chunkLen, in: in, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
+	br := &BitReader{chunkLen: chunkLen, in: in, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
 	var err error
-	bs.bufN, err = bs.in.Read(bs.buf)
-	if err != nil {
+	br.bufN, err = io.ReadFull(br.in, br.buf)
+	if err != nil && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
-	return bs, nil
+	return br, nil
 }
 
 // Read returns the next chunkLen bits from the stream. If there is no more data to read, it returns io.EOF.
 // For example, if chunkLen is 3 and the next 3 bits are 101, Read returns 5, nil.
 func (br *BitReader) Read() (byte, error) {
 	if br.byteIdx >= br.bufN { // need to read more
-		n, err := br.in.Read(br.buf)
-		if err != nil {
+		n, err := io.ReadFull(br.in, br.buf)
+		if err != nil && err != io.ErrUnexpectedEOF {
 			return 0, err
 		}
 		br.byteIdx = 0
