@@ -5,7 +5,7 @@ Any Character Encoding Set
 
 Aces is a command line utility that lets you encode any data to a character set of your choice.
 
-<sub><sup>_Psst... it is also now a library that you can use for encoding and decoding and also writing and reading at a bit level! See documentation [here](https://pkg.go.dev/github.com/quackduck/aces)._</sub></sup>
+<sup>_Psst... it is also now a library that you can use for encoding and decoding and also writing and reading at a bit level! See documentation [here](https://pkg.go.dev/github.com/quackduck/aces)._</sup>
 
 For example, you could encode "Foo Bar" to a combination of these four characters: "HhAa", resulting in this ~~hilarious~~ sequence of laughs:
 ```text
