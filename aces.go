@@ -91,7 +91,6 @@ func (bw *BitWriter) Write(b byte) error {
 		if err != nil {
 			return err
 		}
-		//fmt.Println("wrote ", len(bw.buf), string(bw.buf))
 		bw.buf = make([]byte, BufSize-BufSize%int(bw.chunkLen))
 		bw.bitIdx = 0
 		bw.byteIdx = 0
