@@ -28,7 +28,7 @@ Examples:
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
 
-Set $ACES_BUFSIZE to change the buffer size. The default is ` + strconv.Itoa(aces.BufSize) + ` bytes.
+Set the encoding/decoding buffer size with --bufsize <size> (default ` + strconv.Itoa(aces.BufSize) + ` bytes).
 
 File issues, contribute or star at github.com/quackduck/aces`
 )
@@ -37,8 +37,23 @@ func main() {
 	var charset []rune
 	if len(os.Args) == 1 {
 		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
-		os.Exit(1)
+		return
 	}
+
+	if os.Args[1] == "--bufsize" {
+		if len(os.Args)+1 < 2 { // index 2 avaliable?
+			fmt.Fprintln(os.Stderr, "error: need a value for --bufsize\n"+helpMsg)
+			return
+		}
+		bufsize, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error: invalid value for --bufsize\n"+helpMsg)
+			return
+		}
+		aces.BufSize = bufsize
+		os.Args = os.Args[2:]
+	}
+
 	if os.Args[1] == "-h" || os.Args[1] == "--help" {
 		fmt.Println(helpMsg)
 		return
@@ -47,21 +62,11 @@ func main() {
 	if decode {
 		if len(os.Args) == 2 {
 			fmt.Fprintln(os.Stderr, "error: need character set\n"+helpMsg)
-			os.Exit(1)
+			return
 		}
 		charset = []rune(os.Args[2])
 	} else {
 		charset = []rune(os.Args[1])
-	}
-
-	bufSizeString := os.Getenv("ACES_BUFSIZE")
-	if bufSizeString != "" {
-		bufSize, err := strconv.Atoi(bufSizeString)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error: invalid buffer size:", err)
-			return
-		}
-		aces.BufSize = bufSize
 	}
 
 	c, err := aces.NewCoding(charset)
