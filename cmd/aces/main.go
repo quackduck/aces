@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/quackduck/aces"
 )
@@ -26,6 +27,8 @@ Examples:
    echo Calculus | aces 01                                            # what's stuff in binary?
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
+
+Set $ACES_BUFSIZE to change the buffer size. The default is ` + strconv.Itoa(aces.BufSize) + ` bytes.
 
 File issues, contribute or star at github.com/quackduck/aces`
 )
@@ -51,22 +54,32 @@ func main() {
 		charset = []rune(os.Args[1])
 	}
 
+	bufSizeString := os.Getenv("ACES_BUFSIZE")
+	if bufSizeString != "" {
+		bufSize, err := strconv.Atoi(bufSizeString)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error: invalid buffer size:", err)
+			return
+		}
+		aces.BufSize = bufSize
+	}
+
 	c, err := aces.NewCoding(charset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return
 	}
 
 	if decode {
 		err := c.Decode(os.Stdout, os.Stdin)
 		if err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, "error:", err)
 		}
 		return
 	}
 
 	err = c.Encode(os.Stdout, os.Stdin)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 	}
 }
