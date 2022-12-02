@@ -23,7 +23,7 @@ Examples:
    echo hello world | aces "<>(){}[]" | aces --decode "<>(){}[]"      # basic usage
    echo matthew stanciu | aces HhAa | say                             # make funny sounds (macOS)
    aces " X" < /bin/echo                                              # see binaries visually
-   echo 0100100100100001 | aces -d 01 | aces 01234567                 # convert bases
+   echo 0100100100100001 | aces -d 01 | aces 0123456789abcdef         # convert bases
    echo Calculus | aces 01                                            # what's stuff in binary?
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
@@ -87,4 +87,5 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 	}
+	fmt.Println()
 }
