@@ -207,11 +207,14 @@ func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
 			}
 			return err
 		}
-		err = bw.Write(runeToByte[r])
+		b, ok := runeToByte[r]
+		if !ok {
+			continue
+		}
+		err = bw.Write(b)
 		if err != nil {
 			return err
 		}
 	}
-	bw.Flush()
-	return nil
+	return bw.Flush()
 }
