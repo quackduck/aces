@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 )
 
 // BufSize is the size of the buffers used by BitReader and BitWriter.
@@ -217,4 +218,146 @@ func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
 		}
 	}
 	return bw.Flush()
+}
+
+type ImpureCoding struct {
+	charset   []rune
+	rPerOctet int
+}
+
+func NewImpureCoding(charset []rune) (*ImpureCoding, error) {
+	return &ImpureCoding{charset, runesPerOctet(charset)}, nil
+}
+
+func (c *ImpureCoding) Encode(dst io.Writer, src io.Reader) error {
+	br := bufio.NewReaderSize(src, 10*1024)
+	result := make([]rune, 0, 10*1024)
+	buf := make([]byte, 8)
+	for {
+		_, err := br.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				_, err = dst.Write([]byte(string(result)))
+			}
+			return err
+		}
+
+		result = append(result, encodeOctet(c.charset, buf, c.rPerOctet)...)
+		//result = append(result, ' ')
+
+		if len(result)+64 > cap(result) {
+			_, err = dst.Write([]byte(string(result)))
+			if err != nil {
+				return err
+			}
+			result = result[:0]
+		}
+	}
+}
+
+var resultBuf = make([]rune, 0, 64)
+
+func encodeOctet(set []rune, octet []byte, rPerOctet int) []rune {
+	resultBuf = resultBuf[:0]
+	i := bytesToInt(octet)
+	//println(i.String(), rPerOctet)
+	resultBuf = toBase(i, resultBuf, set)
+	for len(resultBuf) < rPerOctet {
+		// prepend with minimumum new allocations
+		resultBuf = append(resultBuf, 0)
+		copy(resultBuf[1:], resultBuf)
+		resultBuf[0] = set[0]
+	}
+	return resultBuf
+}
+
+func decodeToOctet(set []rune, runes []rune) ([]byte, error) {
+	num, err := fromBase(runes, set)
+	if err != nil {
+		return nil, err
+	}
+	return num.FillBytes(make([]byte, 8)), nil
+}
+
+// TODO. does not ignore non-charset runes in input. change the other encoding to also not tolerate those or change this one
+
+func (c *ImpureCoding) Decode(dst io.Writer, src io.Reader) error {
+	var err error
+
+	br := bufio.NewReaderSize(src, 10*1024)
+	result := make([]byte, 0, 10*1024)
+	buf := make([]rune, c.rPerOctet)
+	var octet []byte
+	for {
+		for i := range buf {
+			buf[i], _, err = br.ReadRune()
+			if err != nil {
+				if i == 0 && err == io.EOF {
+					_, err = dst.Write(result)
+				}
+				return err
+			}
+			if buf[i] == '\n' {
+				i-- // ignore newline, read rune again
+			}
+		}
+
+		octet, err = decodeToOctet(c.charset, buf)
+		if err != nil {
+			return err
+		}
+		result = append(result, octet...)
+
+		if len(result)+8 > cap(result) {
+			_, err = dst.Write(result)
+			if err != nil {
+				return err
+			}
+			result = result[:0]
+		}
+	}
+}
+
+func runesPerOctet(set []rune) int {
+	return int(math.Ceil(64 / math.Log2(float64(len(set)))))
+}
+
+func bytesToInt(b []byte) *big.Int {
+	return (&big.Int{}).SetBytes(b)
+}
+
+func toBase(num *big.Int, buf []rune, set []rune) []rune {
+	base := int64(len(set))
+	div, rem := new(big.Int), new(big.Int)
+	div.QuoRem(num, big.NewInt(base), rem)
+	if div.Cmp(big.NewInt(0)) != 0 {
+		buf = append(buf, toBase(div, buf, set)...)
+	}
+	return append(buf, set[rem.Uint64()])
+}
+
+func fromBase(enc []rune, set []rune) (*big.Int, error) {
+	result := new(big.Int)
+	setlen := len(set)
+
+	setMap := make(map[rune]int64)
+	for i, r := range set {
+		setMap[r] = int64(i)
+	}
+
+	numOfDigits := len(enc)
+	for i := 0; i < numOfDigits; i++ {
+		mult := new(big.Int).Exp( // setlen ^ numOfDigits-i-1 = the "place value"
+			big.NewInt(int64(setlen)),
+			big.NewInt(int64(numOfDigits-i-1)),
+			nil,
+		)
+		idx := setMap[enc[i]]
+		if idx == -1 {
+			return nil, errors.New("could not decode " + string(enc) + ": rune " + string(enc[i]) + " is not in charset")
+		}
+		mult.Mul(mult, big.NewInt(idx)) // multiply "place value" with the digit at spot i
+		result.Add(result, mult)
+	}
+	return result, nil
 }

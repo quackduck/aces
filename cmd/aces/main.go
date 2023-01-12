@@ -35,6 +35,15 @@ File issues, contribute or star at github.com/quackduck/aces`
 
 func main() {
 	var charset []rune
+
+	//i := aces.ImpureCoding{}
+	//i.Charset = []rune("012")
+	//err := i.Encode(os.Stdout, os.Stdin)
+	//if err != nil {
+	//	fmt.Fprintln(os.Stderr, "error:", err)
+	//}
+	//return
+
 	if len(os.Args) == 1 {
 		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
 		return
@@ -69,6 +78,25 @@ func main() {
 		charset = []rune(os.Args[1])
 	}
 
+	// check if charset length isn't a power of 2
+	if len(charset)&(len(charset)-1) != 0 {
+		c, err := aces.NewImpureCoding(charset)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return
+		}
+		if decode {
+			err = c.Decode(os.Stdout, os.Stdin)
+		} else {
+			err = c.Encode(os.Stdout, os.Stdin)
+			fmt.Println()
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
+		return
+	}
+
 	c, err := aces.NewCoding(charset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -76,16 +104,12 @@ func main() {
 	}
 
 	if decode {
-		err := c.Decode(os.Stdout, os.Stdin)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-		}
-		return
+		err = c.Decode(os.Stdout, os.Stdin)
+	} else {
+		err = c.Encode(os.Stdout, os.Stdin)
+		fmt.Println()
 	}
-
-	err = c.Encode(os.Stdout, os.Stdin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 	}
-	fmt.Println()
 }
