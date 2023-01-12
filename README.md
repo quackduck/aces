@@ -35,8 +35,8 @@ aces 01 < $(which echo)
 ```
 You can also write hex/octal/binary/your own format by hand:
 ```shell
-echo C2A7 | aces -d 0123456789ABCDEF
-echo .+=. | aces -d ./+= # try this!
+echo C2A70A   | aces -d 0123456789ABCDEF # try this!
+echo .+=...++ | aces -d ./+=
 ```
 Convert binary to hex:
 ```shell
