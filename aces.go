@@ -123,15 +123,17 @@ func (bw *BitWriter) Flush() error {
 	return err
 }
 
-// Coding represents an encoding scheme like hex, base64, base32 etc.
-// It allows for any custom character set, such as "HhAa" and "😱📣".
-type Coding struct {
-	charset   []rune
-	numOfBits uint8
+// Coding represents an encoding scheme for a character set. See NewCoding for more detail.
+type Coding interface {
+	// Encode reads from src and encodes to dst
+	Encode(dst io.Writer, src io.Reader) error
+	// Decode reads from src and decodes to dst
+	Decode(dst io.Writer, src io.Reader) error
 }
 
-// NewCoding creates a new Coding with the given character set.
-// The length of the character set must be a power of 2 not larger than 256 and must not contain duplicate runes.
+// TODO: Update README
+
+// NewCoding creates a new coding with the given character set.
 //
 // For example,
 //
@@ -142,7 +144,39 @@ type Coding struct {
 //	NewCoding([]rune(" ❗"))
 //
 // creates a binary encoding scheme: 0s are represented by a space and 1s are represented by an exclamation mark.
-func NewCoding(charset []rune) (*Coding, error) {
+//
+// While a character set of any length can be used, those with power of 2 lengths (2, 4, 8, 16, 32, 64, 128, 256) use a
+// more optimized algorithm.
+//
+// Sets that are not power of 2 in length use an algorithm that may not have the same output as other encoders with the
+// same character set. For example, using the base58 character set does not mean that the output will be the same as a
+// base58-specific encoder.
+//
+// This is because most encoders interpret data as a number and use a base conversion algorithm to convert it to the
+// character set. For non-power-of-2 charsets, this requires all data to be read before encoding, which is not possible
+// with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts 8 bytes of data at a time, which
+// is not the same as converting the base of the entire data.
+func NewCoding(charset []rune) (Coding, error) {
+	seen := make(map[rune]bool)
+	for _, r := range charset {
+		if seen[r] {
+			return nil, errors.New("charset contains duplicates: '" + string(r) + "'")
+		}
+		seen[r] = true
+	}
+	if len(charset)&(len(charset)-1) == 0 && len(charset) < 256 { // is power of 2?
+		return newTwoCoding(charset)
+	}
+	return newAnyCoding(charset)
+}
+
+// twoCoding is for character sets of a length that is a power of 2.
+type twoCoding struct {
+	charset   []rune
+	numOfBits uint8
+}
+
+func newTwoCoding(charset []rune) (*twoCoding, error) {
 	numOfBits := uint8(math.Log2(float64(len(charset))))
 	if 1<<numOfBits != len(charset) {
 		numOfBits = uint8(math.Round(math.Log2(float64(len(charset)))))
@@ -151,18 +185,10 @@ func NewCoding(charset []rune) (*Coding, error) {
 				"\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(charset)-1<<numOfBits)), "away)"),
 		)
 	}
-	seen := make(map[rune]bool)
-	for _, r := range charset {
-		if seen[r] {
-			return nil, errors.New("charset contains duplicates")
-		}
-		seen[r] = true
-	}
-	return &Coding{charset: charset, numOfBits: numOfBits}, nil
+	return &twoCoding{charset: charset, numOfBits: numOfBits}, nil
 }
 
-// Encode encodes data from src and writes to dst.
-func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
+func (c *twoCoding) Encode(dst io.Writer, src io.Reader) error {
 	bs, err := NewBitReader(c.numOfBits, src)
 	if err != nil {
 		panic(err)
@@ -192,8 +218,7 @@ func (c *Coding) Encode(dst io.Writer, src io.Reader) error {
 	}
 }
 
-// Decode decodes data from src and writes to dst.
-func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
+func (c *twoCoding) Decode(dst io.Writer, src io.Reader) error {
 	bw := NewBitWriter(c.numOfBits, dst)
 	bufStdin := bufio.NewReaderSize(src, 10*1024)
 	runeToByte := make(map[rune]byte, len(c.charset))
@@ -210,7 +235,10 @@ func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
 		}
 		b, ok := runeToByte[r]
 		if !ok {
-			continue
+			if r == '\n' || r == '\r' {
+				continue
+			}
+			return errors.New("character " + string(r) + "in input is not in the character set")
 		}
 		err = bw.Write(b)
 		if err != nil {
@@ -220,16 +248,17 @@ func (c *Coding) Decode(dst io.Writer, src io.Reader) error {
 	return bw.Flush()
 }
 
-type ImpureCoding struct {
+// anyCoding works with character sets of any length but is less performant than twoCoding.
+type anyCoding struct {
 	charset   []rune
 	rPerOctet int
 }
 
-func NewImpureCoding(charset []rune) (*ImpureCoding, error) {
-	return &ImpureCoding{charset, runesPerOctet(charset)}, nil
+func newAnyCoding(charset []rune) (*anyCoding, error) {
+	return &anyCoding{charset, runesPerOctet(charset)}, nil
 }
 
-func (c *ImpureCoding) Encode(dst io.Writer, src io.Reader) error {
+func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 	br := bufio.NewReaderSize(src, 10*1024)
 	result := make([]rune, 0, 10*1024)
 	buf := make([]byte, 8)
@@ -243,7 +272,6 @@ func (c *ImpureCoding) Encode(dst io.Writer, src io.Reader) error {
 		}
 
 		result = append(result, encodeOctet(c.charset, buf, c.rPerOctet)...)
-		//result = append(result, ' ')
 
 		if len(result)+64 > cap(result) {
 			_, err = dst.Write([]byte(string(result)))
@@ -260,7 +288,6 @@ var resultBuf = make([]rune, 0, 64)
 func encodeOctet(set []rune, octet []byte, rPerOctet int) []rune {
 	resultBuf = resultBuf[:0]
 	i := bytesToInt(octet)
-	//println(i.String(), rPerOctet)
 	resultBuf = toBase(i, resultBuf, set)
 	for len(resultBuf) < rPerOctet {
 		// prepend with minimumum new allocations
@@ -279,9 +306,7 @@ func decodeToOctet(set []rune, runes []rune) ([]byte, error) {
 	return num.FillBytes(make([]byte, 8)), nil
 }
 
-// TODO. does not ignore non-charset runes in input. change the other encoding to also not tolerate those or change this one
-
-func (c *ImpureCoding) Decode(dst io.Writer, src io.Reader) error {
+func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 	var err error
 
 	br := bufio.NewReaderSize(src, 10*1024)
@@ -292,12 +317,12 @@ func (c *ImpureCoding) Decode(dst io.Writer, src io.Reader) error {
 		for i := range buf {
 			buf[i], _, err = br.ReadRune()
 			if err != nil {
-				if i == 0 && err == io.EOF {
+				if err == io.EOF {
 					_, err = dst.Write(result)
 				}
 				return err
 			}
-			if buf[i] == '\n' {
+			if buf[i] == '\n' || buf[i] == '\r' {
 				i-- // ignore newline, read rune again
 			}
 		}
@@ -354,7 +379,7 @@ func fromBase(enc []rune, set []rune) (*big.Int, error) {
 		)
 		idx := setMap[enc[i]]
 		if idx == -1 {
-			return nil, errors.New("could not decode " + string(enc) + ": rune " + string(enc[i]) + " is not in charset")
+			return nil, errors.New("character " + string(enc[i]) + "in input is not in the character set")
 		}
 		mult.Mul(mult, big.NewInt(idx)) // multiply "place value" with the digit at spot i
 		result.Add(result, mult)

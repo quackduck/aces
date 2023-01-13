@@ -16,8 +16,8 @@ Usage:
    aces -d/--decode <charset>   - decode data from STDIN from <charset>
    aces -h/--help               - print this help message
 
-Aces reads from STDIN for your data and outputs the result to STDOUT. The charset length must be
-a power of 2. While decoding, bytes not in the charset are ignored. Aces does not add any padding.
+Aces reads from STDIN for your data and outputs the result to STDOUT. An optimized algorithm is used 
+for character sets with a power of 2 length. Newlines are ignored when decoding.
 
 Examples:
    echo hello world | aces "<>(){}[]" | aces --decode "<>(){}[]"      # basic usage
@@ -27,7 +27,7 @@ Examples:
    echo Calculus | aces 01                                            # what's stuff in binary?
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
-
+   echo -n uwonsmth | aces 🥇🥈🥉                                    # emojis work too! 
 Set the encoding/decoding buffer size with --bufsize <size> (default ` + strconv.Itoa(aces.BufSize) + ` bytes).
 
 File issues, contribute or star at github.com/quackduck/aces`
@@ -35,14 +35,6 @@ File issues, contribute or star at github.com/quackduck/aces`
 
 func main() {
 	var charset []rune
-
-	//i := aces.ImpureCoding{}
-	//i.Charset = []rune("012")
-	//err := i.Encode(os.Stdout, os.Stdin)
-	//if err != nil {
-	//	fmt.Fprintln(os.Stderr, "error:", err)
-	//}
-	//return
 
 	if len(os.Args) == 1 {
 		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
@@ -76,25 +68,6 @@ func main() {
 		charset = []rune(os.Args[2])
 	} else {
 		charset = []rune(os.Args[1])
-	}
-
-	// check if charset length isn't a power of 2
-	if len(charset)&(len(charset)-1) != 0 {
-		c, err := aces.NewImpureCoding(charset)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			return
-		}
-		if decode {
-			err = c.Decode(os.Stdout, os.Stdin)
-		} else {
-			err = c.Encode(os.Stdout, os.Stdin)
-			fmt.Println()
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-		}
-		return
 	}
 
 	c, err := aces.NewCoding(charset)
