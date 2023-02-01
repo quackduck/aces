@@ -44,7 +44,7 @@ func main() {
 	}
 
 	if os.Args[1] == "--bufsize" {
-		if len(os.Args)+1 < 2 { // index 2 avaliable?
+		if len(os.Args)+1 < 2 { // index 2 available?
 			fmt.Fprintln(os.Stderr, "error: need a value for --bufsize\n"+helpMsg)
 			return
 		}

@@ -282,11 +282,6 @@ func newAnyCoding(charset []rune) (*anyCoding, error) {
 	return &anyCoding{charset, defaultNonPow2ByteChunkSize, runesPerChunk(charset, defaultNonPow2ByteChunkSize), defaultBufSize}, nil
 }
 
-//// newAnyCodingWithChunkSize allows setting the length of the chunk whose base is converted at a time
-//func newAnyCodingWithChunkSize(charset []rune, chunkSize int) (*anyCoding, error) {
-//	return &anyCoding{charset, chunkSize, runesPerChunk(charset, chunkSize), defaultBufSize}, nil
-//}
-
 func (c *anyCoding) SetByteChunkSize(size int) {
 	c.chunkSize = size
 	c.rPerChunk = runesPerChunk(c.charset, size)
@@ -356,7 +351,6 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 				if err == io.EOF {
 					_, err = dst.Write(result)
 				}
-				println("Holy shit lol")
 				return err
 			}
 			if buf[i] == '\n' || buf[i] == '\r' {
