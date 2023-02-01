@@ -28,13 +28,15 @@ Examples:
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
    echo -n uwonsmth | aces 🥇🥈🥉                                    # emojis work too! 
-Set the encoding/decoding buffer size with --bufsize <size> (default ` + strconv.Itoa(aces.BufSize) + ` bytes).
+Set the encoding/decoding buffer size with --bufsize <size> (default 16KiB).
 
 File issues, contribute or star at github.com/quackduck/aces`
 )
 
 func main() {
 	var charset []rune
+	var err error
+	bufsize := 16 * 1024
 
 	if len(os.Args) == 1 {
 		fmt.Fprintln(os.Stderr, "error: need at least one argument\n"+helpMsg)
@@ -46,12 +48,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error: need a value for --bufsize\n"+helpMsg)
 			return
 		}
-		bufsize, err := strconv.Atoi(os.Args[2])
+		bufsize, err = strconv.Atoi(os.Args[2])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error: invalid value for --bufsize\n"+helpMsg)
 			return
 		}
-		aces.BufSize = bufsize
 		os.Args = os.Args[2:]
 	}
 
@@ -71,6 +72,7 @@ func main() {
 	}
 
 	c, err := aces.NewCoding(charset)
+	c.SetBufferSize(bufsize)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return

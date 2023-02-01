@@ -9,8 +9,12 @@ import (
 	"math/big"
 )
 
-// BufSize is the size of the buffers used by BitReader and BitWriter.
-var BufSize = 16 * 1024
+// size of the buffers used by BitReader and BitWriter.
+const defaultBufSize = 16 * 1024
+
+// size of the byte chunk whose base is converted at a time when the length of the character
+// set is not a power of 2. See NewCoding for more detail.
+const defaultNonPow2ByteChunkSize = 8
 
 // sliceByteLen slices the byte b such that the result has length len and starting bit start
 func sliceByteLen(b byte, start uint8, len uint8) byte {
@@ -23,6 +27,7 @@ type BitReader struct {
 	in       io.Reader
 
 	buf     []byte
+	bufSize int
 	bitIdx  uint8
 	byteIdx int
 	bufN    int // limited by read size which cannot exceed an int
@@ -30,8 +35,14 @@ type BitReader struct {
 
 // NewBitReader returns a BitReader that reads chunkLen bits at a time from in.
 func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
+	return NewBitReaderSize(chunkLen, in, defaultBufSize)
+}
+
+// NewBitReaderSize is like NewBitReader but allows setting the internal buffer size
+func NewBitReaderSize(chunkLen uint8, in io.Reader, bufSize int) (*BitReader, error) {
 	// bufSize % chunkLen == 0 so that we never have to read across the buffer boundary
-	br := &BitReader{chunkLen: chunkLen, in: in, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
+	br := &BitReader{chunkLen: chunkLen, in: in, bufSize: bufSize - bufSize%int(chunkLen)}
+	br.buf = make([]byte, br.bufSize)
 	var err error
 	br.bufN, err = io.ReadFull(br.in, br.buf)
 	if err != nil && err != io.ErrUnexpectedEOF {
@@ -74,14 +85,22 @@ type BitWriter struct {
 	out      io.Writer
 
 	buf     []byte
+	bufSize int
 	bitIdx  uint8
 	byteIdx int
 }
 
 // NewBitWriter returns a BitWriter that writes chunkLen bits at a time to out.
 func NewBitWriter(chunkLen uint8, out io.Writer) *BitWriter {
+	return NewBitWriterSize(chunkLen, out, defaultBufSize)
+}
+
+// NewBitWriterSize is like NewBitWriter but allows setting the internal buffer size
+func NewBitWriterSize(chunkLen uint8, out io.Writer, bufSize int) *BitWriter {
 	//bufSize % chunkLen == 0 so that we never have to write across the buffer boundary
-	return &BitWriter{chunkLen: chunkLen, out: out, buf: make([]byte, BufSize-BufSize%int(chunkLen))}
+	bw := &BitWriter{chunkLen: chunkLen, out: out, bufSize: bufSize - bufSize%int(chunkLen)}
+	bw.buf = make([]byte, bw.bufSize)
+	return bw
 }
 
 // Write writes the last chunkLen bits from b to the stream.
@@ -92,7 +111,7 @@ func (bw *BitWriter) Write(b byte) error {
 		if err != nil {
 			return err
 		}
-		bw.buf = make([]byte, BufSize-BufSize%int(bw.chunkLen))
+		bw.buf = make([]byte, bw.bufSize)
 		bw.bitIdx = 0
 		bw.byteIdx = 0
 	}
@@ -125,13 +144,16 @@ func (bw *BitWriter) Flush() error {
 
 // Coding represents an encoding scheme for a character set. See NewCoding for more detail.
 type Coding interface {
+	// SetBufferSize sets internal buffer sizes
+	SetBufferSize(size int)
+	// SetByteChunkSize sets the number of bytes whose base is converted at time if the character set does not have a
+	// length that is a power of 2. Encoding and decoding must be done with the same byte chunk size,
+	SetByteChunkSize(size int)
 	// Encode reads from src and encodes to dst
 	Encode(dst io.Writer, src io.Reader) error
 	// Decode reads from src and decodes to dst
 	Decode(dst io.Writer, src io.Reader) error
 }
-
-// TODO: Update README
 
 // NewCoding creates a new coding with the given character set.
 //
@@ -154,8 +176,8 @@ type Coding interface {
 //
 // This is because most encoders interpret data as a number and use a base conversion algorithm to convert it to the
 // character set. For non-power-of-2 charsets, this requires all data to be read before encoding, which is not possible
-// with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts 8 bytes of data at a time, which
-// is not the same as converting the base of the entire data.
+// with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts a default of 8 bytes (adjustable
+// with Coding.SetByteChunkSize) of data at a time, which is not the same as converting the base of the entire data.
 func NewCoding(charset []rune) (Coding, error) {
 	seen := make(map[rune]bool)
 	for _, r := range charset {
@@ -174,6 +196,7 @@ func NewCoding(charset []rune) (Coding, error) {
 type twoCoding struct {
 	charset   []rune
 	numOfBits uint8
+	bufSize   int
 }
 
 func newTwoCoding(charset []rune) (*twoCoding, error) {
@@ -188,22 +211,21 @@ func newTwoCoding(charset []rune) (*twoCoding, error) {
 	return &twoCoding{charset: charset, numOfBits: numOfBits}, nil
 }
 
+func (c *twoCoding) SetByteChunkSize(_ int)    {}
+func (c *twoCoding) SetBufferSize(bufSize int) { c.bufSize = bufSize }
+
 func (c *twoCoding) Encode(dst io.Writer, src io.Reader) error {
-	bs, err := NewBitReader(c.numOfBits, src)
+	bs, err := NewBitReaderSize(c.numOfBits, src, c.bufSize)
 	if err != nil {
 		panic(err)
 	}
-	buf := make([]rune, 0, 10*1024)
+	buf := make([]rune, 0, c.bufSize)
 	var chunk byte
 	for {
 		chunk, err = bs.Read()
 		if err != nil {
 			if err == io.EOF {
 				_, err = dst.Write([]byte(string(buf)))
-				if err != nil {
-					return err
-				}
-				return nil
 			}
 			return err
 		}
@@ -219,8 +241,8 @@ func (c *twoCoding) Encode(dst io.Writer, src io.Reader) error {
 }
 
 func (c *twoCoding) Decode(dst io.Writer, src io.Reader) error {
-	bw := NewBitWriter(c.numOfBits, dst)
-	bufStdin := bufio.NewReaderSize(src, 10*1024)
+	bw := NewBitWriterSize(c.numOfBits, dst, c.bufSize)
+	bufStdin := bufio.NewReaderSize(src, c.bufSize)
 	runeToByte := make(map[rune]byte, len(c.charset))
 	for i, r := range c.charset {
 		runeToByte[r] = byte(i)
@@ -251,29 +273,43 @@ func (c *twoCoding) Decode(dst io.Writer, src io.Reader) error {
 // anyCoding works with character sets of any length but is less performant than twoCoding.
 type anyCoding struct {
 	charset   []rune
-	rPerOctet int
+	chunkSize int
+	rPerChunk int
+	bufSize   int
 }
 
 func newAnyCoding(charset []rune) (*anyCoding, error) {
-	return &anyCoding{charset, runesPerOctet(charset)}, nil
+	return &anyCoding{charset, defaultNonPow2ByteChunkSize, runesPerChunk(charset, defaultNonPow2ByteChunkSize), defaultBufSize}, nil
 }
 
+//// newAnyCodingWithChunkSize allows setting the length of the chunk whose base is converted at a time
+//func newAnyCodingWithChunkSize(charset []rune, chunkSize int) (*anyCoding, error) {
+//	return &anyCoding{charset, chunkSize, runesPerChunk(charset, chunkSize), defaultBufSize}, nil
+//}
+
+func (c *anyCoding) SetByteChunkSize(size int) {
+	c.chunkSize = size
+	c.rPerChunk = runesPerChunk(c.charset, size)
+}
+
+func (c *anyCoding) SetBufferSize(bufSize int) { c.bufSize = bufSize }
+
 func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
-	br := bufio.NewReaderSize(src, 10*1024)
-	result := make([]rune, 0, 10*1024)
-	buf := make([]byte, 8)
+	//br := bufio.NewReaderSize(src, c.bufSize)
+	result := make([]rune, 0, c.bufSize)
+	buf := make([]byte, c.chunkSize)
 	for {
-		_, err := br.Read(buf)
-		if err != nil {
+		_, err := io.ReadFull(src, buf)
+		if err != nil && err != io.ErrUnexpectedEOF {
 			if err == io.EOF {
 				_, err = dst.Write([]byte(string(result)))
 			}
 			return err
 		}
 
-		result = append(result, encodeOctet(c.charset, buf, c.rPerOctet)...)
+		result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
 
-		if len(result)+64 > cap(result) {
+		if len(result)+(8*c.chunkSize) > cap(result) { // (8*c.chunkSize) is the max size of the result (if charset is binary)
 			_, err = dst.Write([]byte(string(result)))
 			if err != nil {
 				return err
@@ -285,12 +321,12 @@ func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 
 var resultBuf = make([]rune, 0, 64)
 
-func encodeOctet(set []rune, octet []byte, rPerOctet int) []rune {
+func encodeByteChunk(set []rune, octet []byte, rPerChunk int) []rune {
 	resultBuf = resultBuf[:0]
 	i := bytesToInt(octet)
 	resultBuf = toBase(i, resultBuf, set)
-	for len(resultBuf) < rPerOctet {
-		// prepend with minimumum new allocations
+	for len(resultBuf) < rPerChunk {
+		// prepend with minimum new allocations
 		resultBuf = append(resultBuf, 0)
 		copy(resultBuf[1:], resultBuf)
 		resultBuf[0] = set[0]
@@ -298,21 +334,21 @@ func encodeOctet(set []rune, octet []byte, rPerOctet int) []rune {
 	return resultBuf
 }
 
-func decodeToOctet(set []rune, runes []rune) ([]byte, error) {
+func decodeToByteChunk(set []rune, runes []rune, chunkSize int) ([]byte, error) {
 	num, err := fromBase(runes, set)
 	if err != nil {
 		return nil, err
 	}
-	return num.FillBytes(make([]byte, 8)), nil
+	return num.FillBytes(make([]byte, chunkSize)), nil
 }
 
 func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 	var err error
 
-	br := bufio.NewReaderSize(src, 10*1024)
-	result := make([]byte, 0, 10*1024)
-	buf := make([]rune, c.rPerOctet)
-	var octet []byte
+	br := bufio.NewReaderSize(src, c.bufSize)
+	result := make([]byte, 0, c.bufSize)
+	buf := make([]rune, c.rPerChunk)
+	var chunk []byte
 	for {
 		for i := range buf {
 			buf[i], _, err = br.ReadRune()
@@ -320,6 +356,7 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 				if err == io.EOF {
 					_, err = dst.Write(result)
 				}
+				println("Holy shit lol")
 				return err
 			}
 			if buf[i] == '\n' || buf[i] == '\r' {
@@ -327,13 +364,13 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 			}
 		}
 
-		octet, err = decodeToOctet(c.charset, buf)
+		chunk, err = decodeToByteChunk(c.charset, buf, c.chunkSize)
 		if err != nil {
 			return err
 		}
-		result = append(result, octet...)
+		result = append(result, chunk...)
 
-		if len(result)+8 > cap(result) {
+		if len(result)+c.chunkSize > cap(result) {
 			_, err = dst.Write(result)
 			if err != nil {
 				return err
@@ -343,8 +380,8 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 	}
 }
 
-func runesPerOctet(set []rune) int {
-	return int(math.Ceil(64 / math.Log2(float64(len(set)))))
+func runesPerChunk(set []rune, chunkLen int) int {
+	return int(math.Ceil(float64(8*chunkLen) / math.Log2(float64(len(set)))))
 }
 
 func bytesToInt(b []byte) *big.Int {
