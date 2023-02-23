@@ -294,17 +294,21 @@ func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 	result := make([]rune, 0, c.bufSize)
 	buf := make([]byte, c.chunkSize)
 	for {
-		_, err := io.ReadFull(src, buf)
+		n, err := io.ReadFull(src, buf)
 		if err != nil && err != io.ErrUnexpectedEOF {
 			if err == io.EOF {
 				_, err = dst.Write([]byte(string(result)))
 			}
 			return err
 		}
+		if err == io.ErrUnexpectedEOF { // end of data, not a multiple of chunk size. TODO: somehow encode how many null bytes to cut off when decoding
+			// buffer is going to have zeros at the end
+			buf = append(buf[:n], make([]byte, c.chunkSize-n)...)
+		}
 
 		result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
 
-		if len(result)+(8*c.chunkSize) > cap(result) { // (8*c.chunkSize) is the max size of the result (if charset is binary)
+		if len(result)+(8*c.chunkSize) > cap(result) { // (8*c.chunkSize) is the max size of the result (considering worst case: charset has length 2)
 			_, err = dst.Write([]byte(string(result)))
 			if err != nil {
 				return err
@@ -320,6 +324,7 @@ func encodeByteChunk(set []rune, octet []byte, rPerChunk int) []rune {
 	resultBuf = resultBuf[:0]
 	i := bytesToInt(octet)
 	resultBuf = toBase(i, resultBuf, set)
+	//return append([]rune(strings.Repeat(string(set[0]), rPerChunk-len(resultBuf))), resultBuf...)
 	for len(resultBuf) < rPerChunk {
 		// prepend with minimum new allocations
 		resultBuf = append(resultBuf, 0)
