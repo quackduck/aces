@@ -147,7 +147,8 @@ type Coding interface {
 	// SetBufferSize sets internal buffer sizes
 	SetBufferSize(size int)
 	// SetByteChunkSize sets the number of bytes whose base is converted at time if the character set does not have a
-	// length that is a power of 2. Encoding and decoding must be done with the same byte chunk size,
+	// length that is a power of 2. Encoding and decoding must be done with the same byte chunk size. The size must be
+	// greater than 0 and less than 256.
 	SetByteChunkSize(size int)
 	// Encode reads from src and encodes to dst
 	Encode(dst io.Writer, src io.Reader) error
@@ -297,18 +298,49 @@ func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 		n, err := io.ReadFull(src, buf)
 		if err != nil && err != io.ErrUnexpectedEOF {
 			if err == io.EOF {
+				//println("got eof")
+				r := toBase(
+					bytesToInt([]byte{byte(c.chunkSize)}),
+					make([]rune, 0, 8),
+					c.charset,
+				)
+
+				//encoded nunmber must be less  than chunksize long
+				//println(string(r), n, fmt.Sprint([]byte{byte(n)}), bytesToInt([]byte{byte(n)}).String(), string(c.charset))
+				//result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
+				result = append(result, r...)
 				_, err = dst.Write([]byte(string(result)))
 			}
 			return err
 		}
 		if err == io.ErrUnexpectedEOF { // end of data, not a multiple of chunk size. TODO: somehow encode how many null bytes to cut off when decoding
 			// buffer is going to have zeros at the end
-			buf = append(buf[:n], make([]byte, c.chunkSize-n)...)
+			//buf = append(buf[:n], make([]byte, c.chunkSize-n)...)
+			//buf = append(buf, byte(c.chunkSize-n)) // number of zeros to cut off
+			//var b =  // just one byte encoded
+			// r is that one byte encoded
+			//println("got unexpected eof")
+			r := toBase(
+				bytesToInt([]byte{byte(n)}),
+				make([]rune, 0, 8),
+				c.charset,
+			)
+
+			//encoded nunmber must be less  than chunksize long
+			//println(string(r), n, fmt.Sprint([]byte{byte(n)}), bytesToInt([]byte{byte(n)}).String(), string(c.charset))
+			result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
+			result = append(result, r...)
+			_, err = dst.Write([]byte(string(result)))
+			if err != nil {
+				return err
+			}
+			return nil
 		}
 
 		result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
+		//println(fmt.Sprint(result))
 
-		if len(result)+(8*c.chunkSize) > cap(result) { // (8*c.chunkSize) is the max size of the result (considering worst case: charset has length 2)
+		if len(result)+(8*int(c.chunkSize)) > cap(result) { // (8*c.chunkSize) is the max size of the result (considering worst case: charset has length 2)
 			_, err = dst.Write([]byte(string(result)))
 			if err != nil {
 				return err
@@ -339,6 +371,8 @@ func decodeToByteChunk(set []rune, runes []rune, chunkSize int) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
+	//println(num.String())
+	//fmt.Println(num.String())
 	return num.FillBytes(make([]byte, chunkSize)), nil
 }
 
@@ -348,13 +382,43 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 	br := bufio.NewReaderSize(src, c.bufSize)
 	result := make([]byte, 0, c.bufSize)
 	buf := make([]rune, c.rPerChunk)
-	var chunk []byte
+	var currChunk []byte
+	var lastChunk []byte
 	for {
-		for i := range buf {
+		//println("result size", len(result))
+		for i := range buf { // read a chunk
 			buf[i], _, err = br.ReadRune()
 			if err != nil {
 				if err == io.EOF {
+					//println("decoding. buf is", string(buf[:i-1]), fmt.Sprint(buf[:i-1]), "currchunk size is", len(currChunk))
+					toKeep := int64(c.chunkSize)
+					if i > 0 { // we_did read some data, right?
+
+						// the current value of buf decoded will be the length of the previous chunk to keep.
+
+						bigNum, err := fromBase(buf[:i-1], c.charset)
+						if err != nil {
+							return err
+						}
+						toKeep = bigNum.Int64()
+						//println(toKeep)
+
+						//	// now check the last byte (which encodes how many zeros to cut off)
+						//	err = br.UnreadByte()
+						//	if err != nil {
+						//		return err
+						//	}
+						//	b, err := br.ReadByte()
+						//	if err != nil {
+						//		return err
+						//	}
+						//	result = result[:len(buf)-int(b)]
+					}
+					//println(toKeep, c.chunkSize)
+					currChunk = currChunk[:toKeep]
+					result = append(result, currChunk...)
 					_, err = dst.Write(result)
+					//println("YAHOOO!!")
 				}
 				return err
 			}
@@ -363,11 +427,14 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 			}
 		}
 
-		chunk, err = decodeToByteChunk(c.charset, buf, c.chunkSize)
+		currChunk, err = decodeToByteChunk(c.charset, buf, c.chunkSize)
 		if err != nil {
 			return err
 		}
-		result = append(result, chunk...)
+		result = append(result, lastChunk...)
+		//println(len(result))
+		lastChunk = currChunk
+		//copy(lastChunk, currChunk) // this system is here because the current chunk may get modified in the next round when there's an EOF
 
 		if len(result)+c.chunkSize > cap(result) {
 			_, err = dst.Write(result)
@@ -380,7 +447,7 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 }
 
 func runesPerChunk(set []rune, chunkLen int) int {
-	return int(math.Ceil(float64(8*chunkLen) / math.Log2(float64(len(set)))))
+	return int(math.Ceil(8 * float64(chunkLen) / math.Log2(float64(len(set)))))
 }
 
 func bytesToInt(b []byte) *big.Int {
