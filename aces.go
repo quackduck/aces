@@ -294,24 +294,23 @@ func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 	//br := bufio.NewReaderSize(src, c.bufSize)
 	result := make([]rune, 0, c.bufSize)
 	buf := make([]byte, c.chunkSize)
+	endWrite := func(n int) error { // endWrite takes the number of bytes that were just read, encodes it and writes to dst.
+		result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
+		result = append(result, toBase(bytesToInt([]byte{byte(n)}), make([]rune, 0, 8), c.charset)...)
+		_, err := dst.Write([]byte(string(result)))
+		return err
+	}
 	for {
 		n, err := io.ReadFull(src, buf)
 		if err != nil && err != io.ErrUnexpectedEOF {
 			if err == io.EOF {
-				r := toBase(bytesToInt([]byte{byte(c.chunkSize)}), make([]rune, 0, 8), c.charset)
-				result = append(result, r...)
-				_, err = dst.Write([]byte(string(result)))
+				err = endWrite(n)
 			}
 			return err
 		}
 		if err == io.ErrUnexpectedEOF { // end of data, not a multiple of chunk size.
 			// encode how many bytes of this chunk to keep
-			result = append(result, encodeByteChunk(c.charset, buf, c.rPerChunk)...)
-			r := toBase(bytesToInt([]byte{byte(n)}), make([]rune, 0, 8), c.charset)
-			//encoded number must be less  than chunksize long
-			result = append(result, r...)
-			_, err = dst.Write([]byte(string(result)))
-			if err != nil {
+			if err = endWrite(n); err != nil {
 				return err
 			}
 			return nil
@@ -367,9 +366,9 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 		for i := range buf { // read a chunk
 			buf[i], _, err = br.ReadRune()
 			if err != nil {
-				if err == io.EOF {
+				if err == io.EOF { // now decode how many bytes of the last chunk to keep
 					toKeep := int64(c.chunkSize)
-					if i > 0 { // we_did read some data, right?
+					if i > 0 { // we did read some data, right?
 						// the current value of buf decoded will be the length of the previous chunk to keep.
 						bigNum, err := fromBase(buf[:i-1], c.charset)
 						if err != nil {
@@ -377,9 +376,7 @@ func (c *anyCoding) Decode(dst io.Writer, src io.Reader) error {
 						}
 						toKeep = bigNum.Int64()
 					}
-					currChunk = currChunk[:toKeep]
-					result = append(result, currChunk...)
-					_, err = dst.Write(result)
+					_, err = dst.Write(append(result, currChunk[:toKeep]...))
 				}
 				return err
 			}
