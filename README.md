@@ -29,6 +29,12 @@ $ echo HELLO WORLD | aces "DORK BUM"
 RRD RBO RKD M  DRBU MBRRRKD RDOR
 ```
 
+You can also use emojis:
+```shell
+$ echo -n uwonsmth | aces 🥇🥈🥉
+🥇🥉🥇🥇🥉🥈🥇🥈🥈🥉🥈🥉🥈🥈🥈🥉🥇🥈🥇🥈🥇🥇🥇🥈🥉🥈🥈🥈🥉🥉🥉🥇🥈🥈🥉🥉🥉🥉🥇🥇🥈
+```
+
 With Aces, you can see the actual 0s and 1s of files:
 ```shell
 aces 01 < $(which echo)
@@ -125,11 +131,11 @@ echo -n -e \\x09\\x92 | base64 # base64 also adds a "=" character called "paddin
 
 ### Aces
 
-Now we generalize this to all character sets.
+Now we generalize this to all character sets of any length.
 
-Generalizing the character set is easy, we just switch out the characters of the array storing the character set.
+Generalizing the characters is easy, we just switch out the characters of the array storing the character set.
 
-Changing the length of the character set is slightly harder. For every character set length, we need to figure out how many bits the chunked data should have. 
+Changing the length of the character set is harder. For every character set length, we need to figure out how many bits the chunked data should have. 
 
 In the Base64 example, the chunk length (let's call it that) was 6. The character set length was 64.
 
@@ -154,10 +160,15 @@ Every bit can either be 1 or 0, so the total possible values of a certain number
 
 The total possible values is the length of the character set (of course, since we need the indices to cover all the characters of the set)
 
-So, to find the number of bits the chunked data should have, we just do `log2(character set length)`. Then, we divide the bytes into chunks of that many bits (which was pretty hard to implement: knowing when to read more bytes, crossing over into the next byte to fetch more bits, etc, etc.), use those bits as indices for the user-supplied character set, and print the result. Easy! (Nope, this is the work of several showers and a lot of late night pondering :) 
+So, to find the number of bits the chunked data should have, we just do `log2(character set length)`. Then, we divide the bytes into chunks of that many bits (which was pretty hard to implement: knowing when to read more bytes, crossing over into the next byte to fetch more bits, etc, etc.), use those bits as indices for the user-supplied character set, and print the result.
+
+Unfortunately, this algorithm only works for character sets with a length that is a power of 2. For character sets with a length that is not a power of 2, we need to do something else.
 
 
+Sets that are not power of 2 in length use an algorithm that may not have the same output as other encoders with the
+same character set. For example, using the base58 character set does not mean that the output will be the same as a base58-specific encoder.
+This is because most encoders interpret data as a number and use a base conversion algorithm to convert it to the
+character set. For non-power-of-2 charsets, this requires all data to be read before encoding, which is not possible
+with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts the base of a default of 8 bytes of data at a time, which is not the same as converting the base of the entire data.
 
-
-
-
+Easy! (Nope, this is the work of several showers and a lot of late night pondering :) 
