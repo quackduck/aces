@@ -12,9 +12,9 @@ var (
 	helpMsg = `Aces - Encode in any character set
 
 Usage:
-   aces <charset>               - encode data from STDIN into <charset>
-   aces -d/--decode <charset>   - decode data from STDIN from <charset>
-   aces -h/--help               - print this help message
+   aces <charset>                  - encode data from STDIN into <charset>
+   aces -d/--decode <charset>      - decode data from STDIN from <charset>
+   aces -v/--version | -h/--help   - print version or this help message
 
 Aces reads from STDIN for your data and outputs the result to STDOUT. An optimized algorithm is used 
 for character sets with a power of 2 length. Newlines are ignored when decoding.
@@ -31,6 +31,7 @@ Examples:
 Set the encoding/decoding buffer size with --bufsize <size> (default 16KiB).
 
 File issues, contribute or star at github.com/quackduck/aces`
+	version = "dev"
 )
 
 func main() {
@@ -60,6 +61,12 @@ func main() {
 		fmt.Println(helpMsg)
 		return
 	}
+
+	if os.Args[1] == "-v" || os.Args[1] == "--version" {
+		fmt.Println("Aces " + version)
+		return
+	}
+
 	decode := os.Args[1] == "--decode" || os.Args[1] == "-d"
 	if decode {
 		if len(os.Args) == 2 {

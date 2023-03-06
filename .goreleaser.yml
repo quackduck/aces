@@ -16,7 +16,7 @@ builds:
       - 386
     main: ./cmd/aces
     ldflags:
-      - -s -w
+      - -s -w -X main.version=v{{.Version}} # -X main.commit={{.Commit}} -X main.date={{.Date}}
     ignore: # problems with build
       - goos: windows
         goarch: arm64

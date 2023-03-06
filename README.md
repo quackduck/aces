@@ -65,9 +65,9 @@ Head over to [releases](https://github.com/quackduck/aces/releases) and download
 Aces - Encode in any character set
 
 Usage:
-  aces <charset>               - encode data from STDIN into <charset>
-  aces -d/--decode <charset>   - decode data from STDIN from <charset>
-  aces -h/--help               - print this help message
+  aces <charset>                  - encode data from STDIN into <charset>
+  aces -d/--decode <charset>      - decode data from STDIN from <charset>
+  aces -v/--version | -h/--help   - print version or this help message
 
   Aces reads from STDIN for your data and outputs the result to STDOUT. An optimized algorithm is used
   for character sets with a power of 2 length. Newlines are ignored when decoding.
