@@ -27,7 +27,7 @@ Examples:
    echo Calculus | aces 01                                            # what's stuff in binary?
    echo Aces™ | base64 | aces -d
    ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
-   echo -n uwonsmth | aces 🥇🥈🥉                                    # emojis work too! 
+   echo -n yay | aces 🥇🥈🥉                                          # emojis work too! 
 Set the encoding/decoding buffer size with --bufsize <size> (default 16KiB).
 
 File issues, contribute or star at github.com/quackduck/aces`

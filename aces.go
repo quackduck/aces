@@ -14,7 +14,7 @@ const defaultBufSize = 16 * 1024
 
 // size of the byte chunk whose base is converted at a time when the length of the character
 // set is not a power of 2. See NewCoding for more detail.
-const defaultNonPow2ByteChunkSize = 8
+const defaultNonPow2ByteChunkSize = 4
 
 // sliceByteLen slices the byte b such that the result has length len and starting bit start
 func sliceByteLen(b byte, start uint8, len uint8) byte {
@@ -177,7 +177,7 @@ type Coding interface {
 //
 // This is because most encoders interpret data as a number and use a base conversion algorithm to convert it to the
 // character set. For non-power-of-2 charsets, this requires all data to be read before encoding, which is not possible
-// with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts a default of 8 bytes (adjustable
+// with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts a default of 4 bytes (adjustable
 // with Coding.SetByteChunkSize) of data at a time, which is not the same as converting the base of the entire data.
 func NewCoding(charset []rune) (Coding, error) {
 	seen := make(map[rune]bool)
@@ -329,9 +329,9 @@ func (c *anyCoding) Encode(dst io.Writer, src io.Reader) error {
 
 var resultBuf = make([]rune, 0, 64)
 
-func encodeByteChunk(set []rune, octet []byte, rPerChunk int) []rune {
+func encodeByteChunk(set []rune, chunk []byte, rPerChunk int) []rune {
 	resultBuf = resultBuf[:0]
-	i := bytesToInt(octet)
+	i := bytesToInt(chunk)
 	resultBuf = toBase(i, resultBuf, set)
 	//return append([]rune(strings.Repeat(string(set[0]), rPerChunk-len(resultBuf))), resultBuf...)
 	for len(resultBuf) < rPerChunk {

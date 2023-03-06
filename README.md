@@ -31,8 +31,8 @@ RRD RBO RKD M  DRBU MBRRRKD RDOR
 
 You can also use emojis:
 ```shell
-$ echo -n uwonsmth | aces 🥇🥈🥉
-🥇🥉🥇🥇🥉🥈🥇🥈🥈🥉🥈🥉🥈🥈🥈🥉🥇🥈🥇🥈🥇🥇🥇🥈🥉🥈🥈🥈🥉🥉🥉🥇🥈🥈🥉🥉🥉🥉🥇🥇🥈
+$ echo -n yay | aces 🥇🥈🥉
+🥇🥈🥉🥇🥉🥇🥉🥉🥇🥉🥉🥇🥈🥇🥉🥇🥉🥉🥇🥉🥇🥈🥇
 ```
 
 With Aces, you can see the actual 0s and 1s of files:
@@ -80,7 +80,7 @@ Examples:
   echo Calculus | aces 01                                            # what's stuff in binary?
   echo Aces™ | base64 | aces -d
   ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/   # even decode base64
-  echo -n uwonsmth | aces 🥇🥈🥉                                    # emojis work too! 
+  echo -n yay | aces 🥇🥈🥉                                          # emojis work too! 
   Set the encoding/decoding buffer size with --bufsize <size> (default 16KiB).
 
   File issues, contribute or star at github.com/quackduck/aces
