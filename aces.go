@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"strings"
 )
 
 // size of the buffers used by BitReader and BitWriter.
@@ -40,6 +41,7 @@ func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
 
 // NewBitReaderSize is like NewBitReader but allows setting the internal buffer size
 func NewBitReaderSize(chunkLen uint8, in io.Reader, bufSize int) (*BitReader, error) {
+	fmt.Println("bufSize", bufSize)
 	// bufSize % chunkLen == 0 so that we never have to read across the buffer boundary
 	br := &BitReader{chunkLen: chunkLen, in: in, bufSize: bufSize - bufSize%int(chunkLen)}
 	br.buf = make([]byte, br.bufSize)
@@ -178,19 +180,31 @@ type Coding interface {
 // This is because most encoders interpret data as a number and use a base conversion algorithm to convert it to the
 // character set. For non-power-of-2 charsets, this requires all data to be read before encoding, which is not possible
 // with streams. To enable stream encoding for non-power-of-2 charsets, Aces converts a default of 4 bytes (adjustable
-// with Coding.SetByteChunkSize) of data at a time, which is not the same as converting the base of the entire data.
+// with Coding.SetByteChunkSize) of data at a time, which is not the same as converting the base of the entire data. If
+// stream encoding is not necessary, use StaticCoding, for which using the base58 character set, for example, will
+// produce the same output as a base58-specific encoder.
 func NewCoding(charset []rune) (Coding, error) {
-	seen := make(map[rune]bool)
-	for _, r := range charset {
-		if seen[r] {
-			return nil, errors.New("charset contains duplicates: '" + string(r) + "'")
-		}
-		seen[r] = true
+	if err := checkSet(charset); err != nil {
+		return nil, err
 	}
 	if len(charset)&(len(charset)-1) == 0 && len(charset) < 256 { // is power of 2?
 		return newTwoCoding(charset)
 	}
 	return newAnyCoding(charset)
+}
+
+func checkSet(charset []rune) error {
+	if len(charset) <= 2 {
+		return errors.New("charset length must be greater than 2")
+	}
+	seen := make(map[rune]bool)
+	for _, r := range charset {
+		if seen[r] {
+			return errors.New("charset contains duplicates: '" + string(r) + "'")
+		}
+		seen[r] = true
+	}
+	return nil
 }
 
 // twoCoding is for character sets of a length that is a power of 2.
@@ -209,7 +223,7 @@ func newTwoCoding(charset []rune) (*twoCoding, error) {
 				"\n   want: a power of 2 (nearest is", 1<<numOfBits, "which is", math.Abs(float64(len(charset)-1<<numOfBits)), "away)"),
 		)
 	}
-	return &twoCoding{charset: charset, numOfBits: numOfBits}, nil
+	return &twoCoding{charset: charset, numOfBits: numOfBits, bufSize: defaultBufSize}, nil
 }
 
 func (c *twoCoding) SetByteChunkSize(_ int)    {}
@@ -441,4 +455,62 @@ func fromBase(enc []rune, set []rune) (*big.Int, error) {
 		result.Add(result, mult)
 	}
 	return result, nil
+}
+
+type StaticCoding struct {
+	charset         []rune
+	maxRunesPerByte float64
+}
+
+// NewStaticCoding creates a StaticCoding with the given character set, which must be a set of unique runes.
+// StaticCoding differs from Coding in that it does not accept streamed input, but instead requires the entire input to
+// be provided at once. So, StaticCoding is not recommended for very large inputs. It encodes by changing the
+// mathematical base of the input (interpreted as a binary number) to the length of the charset. Each null byte at the
+// beginning of the input are encoded as the first character in the charset.
+//
+// For example,
+//
+//	NewStaticCoding([]rune("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"))
+//
+// creates the base58 encoding scheme compatible with Bitcoin's implementation.
+func NewStaticCoding(charset []rune) (*StaticCoding, error) {
+	if err := checkSet(charset); err != nil {
+		return nil, err
+	}
+	// calculate what maximum multiplier a charset of this length increases data size by
+	maxRunesPerByte := 8 / math.Log2(float64(len(charset)))
+	return &StaticCoding{charset, maxRunesPerByte}, nil
+}
+
+func (c *StaticCoding) Encode(data []byte) (string, error) {
+	nullBytes := 0
+	for i := range data {
+		if data[i] == 0 {
+			nullBytes++
+		} else {
+			break
+		}
+	}
+	return strings.Repeat(string(c.charset[0]), nullBytes) + string(toBase(
+		bytesToInt(data[nullBytes:]),
+		make([]rune, 0, int(math.Ceil(c.maxRunesPerByte*float64(len(data))))),
+		c.charset,
+	)), nil
+}
+
+func (c *StaticCoding) Decode(data string) ([]byte, error) {
+	dataR := []rune(data)
+	nullBytes := 0
+	for i := range dataR {
+		if dataR[i] == c.charset[0] {
+			nullBytes++
+		} else {
+			break
+		}
+	}
+	bigNum, err := fromBase(dataR, c.charset)
+	if err != nil {
+		return nil, err
+	}
+	return append(make([]byte, nullBytes), bigNum.Bytes()...), nil
 }
