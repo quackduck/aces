@@ -15,6 +15,7 @@ builds:
       - arm64
       - 386
     main: ./cmd/aces
+    dir: ./cmd/aces
     ldflags:
       - -s -w -X main.version=v{{.Version}} # -X main.commit={{.Commit}} -X main.date={{.Date}}
     ignore: # problems with build
