@@ -34,6 +34,18 @@ File issues, contribute or star at github.com/quackduck/aces`
 	version = "dev"
 )
 
+// Function to check if all characters in a slice are unique
+func allUnique(charset []rune) bool {
+	seen := make(map[rune]bool)
+	for _, char := range charset {
+		if seen[char] {
+			return false
+		}
+		seen[char] = true
+	}
+	return true
+}
+
 func main() {
 	var charset []rune
 	var err error
@@ -76,6 +88,12 @@ func main() {
 		charset = []rune(os.Args[2])
 	} else {
 		charset = []rune(os.Args[1])
+	}
+
+	// After determining the charset and before creating the aces.NewCoding instance
+	if !allUnique(charset) {
+		fmt.Fprintln(os.Stderr, "error: character set contains duplicate characters")
+		return
 	}
 
 	c, err := aces.NewCoding(charset)
