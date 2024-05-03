@@ -41,7 +41,6 @@ func NewBitReader(chunkLen uint8, in io.Reader) (*BitReader, error) {
 
 // NewBitReaderSize is like NewBitReader but allows setting the internal buffer size
 func NewBitReaderSize(chunkLen uint8, in io.Reader, bufSize int) (*BitReader, error) {
-	fmt.Println("bufSize", bufSize)
 	// bufSize % chunkLen == 0 so that we never have to read across the buffer boundary
 	br := &BitReader{chunkLen: chunkLen, in: in, bufSize: bufSize - bufSize%int(chunkLen)}
 	br.buf = make([]byte, br.bufSize)
