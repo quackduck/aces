@@ -194,8 +194,8 @@ func NewCoding(charset []rune) (Coding, error) {
 }
 
 func checkSet(charset []rune) error {
-	if len(charset) <= 2 {
-		return errors.New("charset length must be greater than 2")
+	if len(charset) < 2 {
+		return errors.New("charset length must be at least 2")
 	}
 	seen := make(map[rune]bool)
 	for _, r := range charset {

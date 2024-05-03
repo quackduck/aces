@@ -79,11 +79,12 @@ func main() {
 	}
 
 	c, err := aces.NewCoding(charset)
-	c.SetBufferSize(bufsize)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return
 	}
+
+	c.SetBufferSize(bufsize)
 
 	if decode {
 		err = c.Decode(os.Stdout, os.Stdin)
