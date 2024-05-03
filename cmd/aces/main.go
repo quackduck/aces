@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/quackduck/aces"
+	"github.com/quackduck/aces/v2"
 )
 
 var (

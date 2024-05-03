@@ -2,6 +2,6 @@ module aces
 
 go 1.22.2
 
-require github.com/quackduck/aces v1.2.1
+require github.com/quackduck/aces/v2 v2.2.2
 
-replace github.com/quackduck/aces => ../../
+replace github.com/quackduck/aces/v2 => ../../
